@@ -19,8 +19,8 @@
   button.primary{background:#1f6feb;color:#fff;border:0;padding:6px 12px;border-radius:5px}
   table.week td{min-width:120px;font-size:13px;cursor:pointer}
   table.week td.sel{outline:2px solid #1f6feb}
-  table.week.armed td[data-day]{background:#eaf2ff}
-  table.week.armed td[data-day]:hover{background:#cfe2ff}
+  table.week td[data-day]:hover{background:#eaf2ff}
+  table.week td.sel{background:#cfe2ff}
   table.week .tot{font-weight:bold;font-size:15px}
   table.week .over{color:#b00}
   .board{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:10px}
@@ -164,10 +164,10 @@
       <input type="date" name="day">
       <span id="bookInfo"></span>
     </form>
-    <p style="margin:0;color:#555">Tick what to book, then click an inspector's day on the week board.</p>
-    <h3><span id="readyHead">Ready to book</span> <button type="button" id="toWeek" class="primary">Send ticked to week board ↓</button> <button type="button" id="backToDue">Send ticked back to Due</button></h3>
+    <p style="margin:0;color:#555">Tick what to book, click an inspector's day on the week board, then click <b>Book</b>.</p>
+    <h3><span id="readyHead">Ready to book</span> <button type="button" id="doBook" class="primary">Book</button> <span id="bookPick" style="font-size:14px;font-weight:normal"></span> <button type="button" id="backToDue">Send ticked back to Due</button></h3>
     <div style="max-height:45vh;overflow:auto"><table id="readyList" class="grp"></table></div>
-    <h3>Week board <small style="font-weight:normal;color:#555">(click a day to book the ticked ones into it)</small></h3>
+    <h3>Week board <small style="font-weight:normal;color:#555">(click a day to select it)</small></h3>
     <div class="bar"><button type="button" id="wkPrev">◀</button><b id="wkLabel"></b><button type="button" id="wkNext">▶</button></div>
     <table id="week" class="week"></table>
   </div>
@@ -457,9 +457,10 @@ async function updateBookInfo() {
   const ins = inspectors.find(i => i.id === f.inspector.value);
   document.querySelectorAll('#week td.sel').forEach(td => td.classList.remove('sel'));
   document.querySelector(`#week td[data-ins="${f.inspector.value}"][data-day="${f.day.value}"]`)?.classList.add('sel');
-  if (!ins || !f.day.value) return $('#bookInfo').textContent = '';
+  const nice = f.day.value ? new Date(f.day.value + 'T00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+  if (!ins || !f.day.value) { $('#bookPick').textContent = 'Pick a day on the week board'; return; }
   const total = (await dayCount(ins.id, f.day.value)) + n;
-  $('#bookInfo').innerHTML = `${esc(ins.name)} on ${f.day.value}: ${total}/${ins.daily_capacity}` +
+  $('#bookPick').innerHTML = `${n} → ${esc(ins.name)}, ${nice} (${total}/${ins.daily_capacity})` +
     (total > ins.daily_capacity ? ' <span class=bad>over capacity</span>' : '');
 }
 $('#bookForm').inspector.onchange = updateBookInfo;
@@ -513,23 +514,18 @@ async function loadWeek() {
     }).join('');
   updateBookInfo();
 }
-$('#toWeek').onclick = () => {
-  if (!ticked.ready.size) return msg('Tick some on the Ready to book list first');
-  $('#week').classList.add('armed');
-  $('#week').scrollIntoView({ behavior: 'smooth', block: 'center' });
-  msg(`Now click the inspector and day to book ${ticked.ready.size} into`);
-};
-$('#week').onclick = async e => {
+$('#week').onclick = e => {
   const td = e.target.closest('td[data-day]'); if (!td) return;
+  $('#bookForm').inspector.value = td.dataset.ins; $('#bookForm').day.value = td.dataset.day;
+  updateBookInfo();
+};
+$('#doBook').onclick = async () => {
+  const f = $('#bookForm'), ins = inspectors.find(i => i.id === f.inspector.value);
   if (!ticked.ready.size) return msg('Tick some on the Ready to book list first');
-  const ins = inspectors.find(i => i.id === td.dataset.ins), day = td.dataset.day;
-  const total = (await dayCount(ins.id, day)) + ticked.ready.size;
-  const nice = new Date(day + 'T00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
-  if (!confirm(`Book ${ticked.ready.size} into ${ins.name} on ${nice}?\nThat makes ${total}/${ins.daily_capacity}` +
-    (total > ins.daily_capacity ? ' – OVER CAPACITY' : ''))) return;
-  $('#bookForm').inspector.value = ins.id; $('#bookForm').day.value = day;
-  $('#week').classList.remove('armed');
-  $('#bookForm').requestSubmit();
+  if (!ins || !f.day.value) return msg('Click an inspector\'s day on the week board first');
+  const total = (await dayCount(ins.id, f.day.value)) + ticked.ready.size;
+  if (total > ins.daily_capacity && !confirm(`That makes ${total}/${ins.daily_capacity} for ${ins.name} – over capacity. Book anyway?`)) return;
+  f.requestSubmit();
 };
 const shiftWeek = n => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + n); weekStart = iso(d); loadWeek(); };
 $('#wkPrev').onclick = () => shiftWeek(-7);
