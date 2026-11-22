@@ -140,7 +140,7 @@
     <form id="dueFilter">
       <label>Due by <input type="date" name="by"></label>
       <input name="area" placeholder="Area, suburb or postcode">
-      <select name="group"><option value="agency,area">Group: agent → area</option><option value="area,agency">Group: area → agent</option></select>
+      <select name="group"><option value="agency,reason,area">Group: agent → reason → area</option><option value="area,reason,agency">Group: area → reason → agent</option></select>
       <button>Show</button>
       <span id="dueInfo"></span> · <b id="selCount">0 selected</b>
     </form>
@@ -347,23 +347,25 @@ async function loadDue() {
   if (a) q = /^\d+$/.test(a) ? q.eq('postcode', a) : q.or(`area.ilike.%${a}%,suburb.ilike.%${a}%`);
   const { data, count, error } = await q;
   if (error) return msg(error.message);
-  const today = iso(new Date()), [k1, k2] = f.group.value.split(',');
-  const tree = {};   // reason → group → subgroup → rows
-  for (const r of data) (((tree[r.reason] ??= {})[r[k1] || '—'] ??= {})[r[k2] || '—'] ??= []).push(r);
+  const today = iso(new Date()), [k0, k1, k2] = f.group.value.split(',');
+  const tree = {};
+  for (const r of data) (((tree[r[k0] || '—'] ??= {})[r[k1] || '—'] ??= {})[r[k2] || '—'] ??= []).push(r);
   const n = o => Array.isArray(o) ? o.length : Object.values(o).reduce((t, v) => t + n(v), 0);
-  const bySize = o => Object.keys(o).sort((x, y) => n(o[y]) - n(o[x]));
+  const order = (o, key) => key === 'reason'
+    ? ['Breakdown', 'Annual'].filter(x => o[x]).concat(Object.keys(o).filter(x => !['Breakdown', 'Annual'].includes(x)))
+    : Object.keys(o).sort((x, y) => n(o[y]) - n(o[x]));
   let html = '<tr><th></th><th>Address</th><th>Last done</th><th>Due</th><th>Notes</th></tr>', gi = 0;
   const head = (cls, id, label, pad) => `<tr class="${cls}"><td><input type="checkbox" data-group="${id}"></td><td colspan="4">${pad}${label}</td></tr>`;
-  for (const reason of ['Breakdown', 'Annual'].filter(x => tree[x])) {
+  for (const a0 of order(tree, k0)) {
     const id0 = 'r' + (gi++);
-    html += head('g0', id0, `${reason} — ${n(tree[reason])}`, '');
-    for (const g1 of bySize(tree[reason])) {
+    html += head('g0', id0, `${esc(a0)} — ${n(tree[a0])}`, '');
+    for (const a1 of order(tree[a0], k1)) {
       const id1 = 'g' + (gi++);
-      html += head('g1', id1, `${esc(g1)} — ${n(tree[reason][g1])}`, '&nbsp;&nbsp;');
-      for (const g2 of bySize(tree[reason][g1])) {
-        const id2 = 'g' + (gi++), rows = tree[reason][g1][g2]
+      html += head('g1', id1, `${esc(a1)} — ${n(tree[a0][a1])}`, '&nbsp;&nbsp;');
+      for (const a2 of order(tree[a0][a1], k2)) {
+        const id2 = 'g' + (gi++), rows = tree[a0][a1][a2]
           .sort((x, y) => (x.suburb || '').localeCompare(y.suburb || '') || x.address_line.localeCompare(y.address_line));
-        html += head('g2', id2, `${esc(g2)} — ${rows.length}`, '&nbsp;&nbsp;&nbsp;&nbsp;');
+        html += head('g2', id2, `${esc(a2)} — ${rows.length}`, '&nbsp;&nbsp;&nbsp;&nbsp;');
         html += rows.map(r => `<tr><td><input type="checkbox" class="pick ${id0} ${id1} ${id2}" data-prop="${r.property_id}" data-job="${r.job_id || ''}" data-label="${esc(r.reason + ': ' + r.address_line + ', ' + r.suburb)}"${selected.has(r.job_id || 'p:' + r.property_id) ? ' checked' : ''}></td>
           <td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td>${date(r.last_done)}</td>
           <td class="${r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td><td>${esc(r.notes)}</td></tr>`).join('');
