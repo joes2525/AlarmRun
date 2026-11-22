@@ -16,7 +16,7 @@
   table.grp{width:100%}
   table.grp tr:not([class]) td:not(:last-child),table.grp tr.prow td:not(:last-child){white-space:nowrap;width:1%}
   .halves{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
-  .halves>div{max-height:50vh;overflow:auto}
+  .halves>div{height:250px;overflow:auto;border:1px solid #ddd}
   table.heads tr.prow,table.heads tr:first-child{display:none}
   table.heads td[data-focus]{cursor:pointer} table.heads td[data-focus]:hover{text-decoration:underline}
   table.heads tr.focus td{outline:2px solid #1f6feb}
@@ -171,7 +171,7 @@
     </form>
     <div class="halves">
       <div><table id="readyList" class="grp heads"></table></div>
-      <div><div id="propsHead" style="font-weight:bold;padding:4px 0">Click an agent or area to see its properties</div><table id="readyProps" class="grp"></table></div>
+      <div><div id="propsHead" style="font-weight:bold;padding:4px 6px">Tick or click an agent or area to see its properties</div><table id="readyProps" class="grp"></table></div>
     </div>
     <p style="margin:0;color:#555">Tick what to book, click an inspector's day on the week board, then click <b>Book</b>.</p>
     <h3><span id="readyHead">Ready to book</span> <button type="button" id="doBook" class="primary">Book</button> <button type="button" id="unbookDay">Unbook day</button> <button type="button" id="backToDue">Send ticked back to Due</button></h3>
@@ -395,6 +395,7 @@ function renderGrouped(rows, el, which, groupBy) {
     const g = e.target.dataset.group;
     const boxes = g ? [...el.querySelectorAll('.pick.' + g)] : e.target.classList.contains('pick') ? [e.target] : [];
     boxes.forEach(c => { c.checked = e.target.checked; c.checked ? ticked[which].add(c.dataset.key) : ticked[which].delete(c.dataset.key); });
+    if (which === 'ready' && g) focusGroup = g;
     counts(); if (which === 'ready') showProps();
   };
   if (which === 'ready') {
@@ -409,7 +410,7 @@ let focusGroup = null;
 function showProps() {
   const left = $('#readyList'), head = left.querySelector(`[data-focus="${focusGroup}"]`);
   left.querySelectorAll('tr.focus').forEach(tr => tr.classList.remove('focus'));
-  if (!head) { $('#readyProps').innerHTML = ''; $('#propsHead').textContent = 'Click an agent or area to see its properties'; return; }
+  if (!head) { $('#readyProps').innerHTML = ''; $('#propsHead').textContent = 'Tick or click an agent or area to see its properties'; return; }
   head.parentElement.classList.add('focus');
   const today = iso(new Date());
   const rows = [...left.querySelectorAll('.pick.' + focusGroup)].map(c => readyRows.get(c.dataset.key)).filter(Boolean);
