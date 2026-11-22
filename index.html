@@ -392,7 +392,7 @@ function renderGrouped(rows, el, which, groupBy) {
 
 function counts() {
   $('#dueCount').textContent = `${ticked.due.size} ticked`;
-  $('#readyHead').textContent = `Ready to book — ${staged.size} (${ticked.ready.size} ticked)`;
+  $('#readyHead').textContent = `Ready to book — ${readyRows.size} (${ticked.ready.size} ticked)`;
   updateBookInfo();
 }
 
@@ -410,7 +410,23 @@ async function loadDue() {
   renderGrouped(rows, $('#dueList'), 'due', f.group.value);
 }
 
-const renderReady = () => renderGrouped([...staged.values()], $('#readyList'), 'ready', 'agency,reason,area');
+// Ready to book = what you moved from Due + any open jobs that have no inspector yet
+let readyRows = new Map();
+async function renderReady() {
+  const { data, error } = await sb.from('jobs')
+    .select('id,property_id,job_type,status,scheduled_start,notes,properties(address_line,suburb,postcode,clients(name))')
+    .is('inspector_id', null).in('status', ['to_book', 'booked']).limit(2000);
+  if (error) return msg(error.message);
+  const label = { callout: 'Breakdown', annual: 'Annual', pre_tenancy: 'Lease', sale: 'Sale', install: 'Install' };
+  const unassigned = data.filter(j => !(j.job_type === 'callout' && j.status === 'to_book'))   // logged breakdowns live on Due
+    .map(j => ({ reason: label[j.job_type] || 'Other', property_id: j.property_id, job_id: j.id,
+      address_line: j.properties?.address_line || '', suburb: j.properties?.suburb || '', postcode: j.properties?.postcode,
+      agency: j.properties?.clients?.name, area: areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || 'No area',
+      last_done: null, due_date: j.scheduled_start ? j.scheduled_start.slice(0,10) : null,
+      notes: [j.scheduled_start ? 'Unassigned job' : 'Unbooked job', j.notes].filter(Boolean).join(' – ') }));
+  readyRows = new Map([...staged, ...unassigned.map(r => [keyOf(r), r])]);
+  renderGrouped([...readyRows.values()], $('#readyList'), 'ready', 'agency,reason,area');
+}
 
 $('#toBook').onclick = () => {
   if (!ticked.due.size) return msg('Tick some properties first');
@@ -421,8 +437,11 @@ $('#toBook').onclick = () => {
 };
 $('#backToDue').onclick = () => {
   if (!ticked.ready.size) return msg('Tick some on the Ready to book list first');
+  const jobs = [...ticked.ready].filter(k => !staged.has(k));
   for (const k of ticked.ready) staged.delete(k);
-  ticked.ready.clear(); saveStaged(); renderReady(); msg('Sent back to Due');
+  if (jobs.length) msg('Unassigned jobs stay here – cancel them on the Jobs page if not needed');
+  else msg('Sent back to Due');
+  ticked.ready.clear(); saveStaged(); renderReady();
 };
 
 async function dayCount(inspectorId, day) {
@@ -449,7 +468,7 @@ $('#dueFilter').group.onchange = loadDue;
 
 $('#bookForm').onsubmit = async e => {
   e.preventDefault();
-  const f = e.target, picks = [...ticked.ready].map(k => staged.get(k)).filter(Boolean);
+  const f = e.target, picks = [...ticked.ready].map(k => readyRows.get(k)).filter(Boolean);
   if (!picks.length) return msg('Tick some on the Ready to book list first');
   const when = `${f.day.value}T09:00:00`, start = await dayCount(f.inspector.value, f.day.value);
   const fresh = picks.filter(r => !r.job_id).map((r, i) => ({ company_id: companyId, property_id: r.property_id, job_type: 'annual',
