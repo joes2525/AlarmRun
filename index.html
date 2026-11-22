@@ -548,22 +548,20 @@ async function openDay() {
       <td>${label[j.job_type] || esc(j.job_type)}</td><td>${esc(j.status)}</td>
       <td>${j.status === 'booked' ? `<button data-unbook="${j.id}" data-type="${j.job_type}">Unbook</button>` : ''}</td><td>${esc(j.notes)}</td></tr>`).join('') + '</table>';
 }
-// breakdowns go back to Due as a logged breakdown; other bookings are cancelled so the property is due again
-const unbook = (id, type) => sb.from('jobs').update(type === 'callout'
-  ? { status: 'to_book', inspector_id: null, scheduled_start: null, route_order: null }
-  : { status: 'cancelled' }).eq('id', id);
+// unbooked jobs keep existing but lose their inspector/day, so they land back in Ready to book
+const unbook = id => sb.from('jobs').update({ status: 'booked', inspector_id: null, scheduled_start: null, route_order: null }).eq('id', id);
 $('#dayView').onclick = async e => {
   const id = e.target.dataset.unbook; if (!id) return;
-  const { error } = await unbook(id, e.target.dataset.type);
+  const { error } = await unbook(id);
   if (error) return msg(error.message);
-  openDay(); loadWeek();
+  openDay(); loadWeek(); renderReady();
 };
 $('#unbookDay').onclick = async () => {
   const btns = [...document.querySelectorAll('#dayView [data-unbook]')];
   if (!btns.length) return msg('Nothing booked to unbook on the selected day (completed jobs stay)');
-  if (!confirm(`Unbook all ${btns.length} booked jobs on this day? They go back to Due.`)) return;
-  for (const b of btns) { const { error } = await unbook(b.dataset.unbook, b.dataset.type); if (error) return msg(error.message); }
-  msg(`Unbooked ${btns.length}`); openDay(); loadWeek();
+  if (!confirm(`Unbook all ${btns.length} booked jobs on this day? They go back to Ready to book.`)) return;
+  for (const b of btns) { const { error } = await unbook(b.dataset.unbook); if (error) return msg(error.message); }
+  msg(`Unbooked ${btns.length} – back in Ready to book`); openDay(); loadWeek(); renderReady();
 };
 const shiftWeek = n => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + n); weekStart = iso(d); loadWeek(); };
 $('#wkPrev').onclick = () => shiftWeek(-7);
