@@ -5,14 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
 <style>
-  body{font-family:system-ui,sans-serif;margin:0;padding:16px;max-width:1000px}
+  body{font-family:system-ui,sans-serif;margin:0;padding:16px;max-width:1200px}
   nav button{margin-right:6px}
   table{border-collapse:collapse;width:100%;margin-top:10px}
-  td,th{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:14px}
+  td,th{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:14px;vertical-align:top}
+  tr.click{cursor:pointer} tr.click:hover{background:#eef}
   form{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;padding:10px;background:#f4f4f4}
   input,select{padding:5px}
   .hidden{display:none}
   #msg{color:#b00}
+  .bad{color:#b00;font-weight:bold} .good{color:#070}
+  .bar{display:flex;gap:8px;align-items:center;margin-top:8px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
@@ -21,7 +24,6 @@
 <h1>AlarmRun – Office</h1>
 <p id="msg"></p>
 
-<!-- Login -->
 <section id="login" class="hidden">
   <form id="loginForm">
     <input name="email" type="email" placeholder="Email" required>
@@ -31,7 +33,6 @@
   </form>
 </section>
 
-<!-- First-time company setup -->
 <section id="setup" class="hidden">
   <h2>Set up your company</h2>
   <form id="setupForm">
@@ -41,13 +42,14 @@
   </form>
 </section>
 
-<!-- Main app -->
 <section id="app" class="hidden">
   <nav>
     <span id="who"></span> |
     <button data-tab="clients">Clients</button>
     <button data-tab="properties">Properties</button>
     <button data-tab="jobs">Jobs</button>
+    <button data-tab="certificates">Certificates</button>
+    <button data-tab="invoices">Invoices</button>
     <button id="logout">Log out</button>
   </nav>
 
@@ -61,7 +63,6 @@
       <input name="default_price" type="number" step="0.01" placeholder="Price ex GST">
       <button>Add client</button>
     </form>
-    <table id="list-clients"></table>
   </div>
 
   <div id="tab-properties" class="tab hidden">
@@ -76,34 +77,64 @@
       <input name="next_due" type="date" title="Next check due">
       <button>Add property</button>
     </form>
-    <table id="list-properties"></table>
   </div>
 
   <div id="tab-jobs" class="tab hidden">
     <h2>Jobs</h2>
     <form data-table="jobs">
-      <select name="property_id" class="propertyPick" required></select>
+      <input class="propSearch" list="propList" placeholder="Type address…" required>
+      <input type="hidden" name="property_id">
+      <datalist id="propList"></datalist>
       <select name="job_type"><option>annual</option><option>pre_tenancy</option><option>sale</option><option>install</option><option>callout</option></select>
       <input name="scheduled_start" type="datetime-local">
       <select name="status"><option>to_book</option><option>booked</option></select>
       <button>Add job</button>
     </form>
-    <table id="list-jobs"></table>
+  </div>
+
+  <div id="tab-certificates" class="tab hidden"><h2>Certificates</h2></div>
+  <div id="tab-invoices" class="tab hidden"><h2>Invoices</h2></div>
+
+  <!-- shared list area -->
+  <div id="listArea">
+    <div class="bar">
+      <input id="search" placeholder="Search…" size="30">
+      <button id="prev">◀ Prev</button><span id="pageInfo"></span><button id="next">Next ▶</button>
+    </div>
+    <table id="list"></table>
+  </div>
+
+  <!-- property detail -->
+  <div id="detail" class="hidden">
+    <p><button id="back">← Back to list</button></p>
+    <div id="detailBody"></div>
   </div>
 </section>
 
 <script>
 const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
-let companyId = null;
+const PAGE = 50;
+let companyId = null, tab = 'clients', page = 0, term = '';
 const $ = s => document.querySelector(s);
 const show = id => ['login','setup','app'].forEach(s => $('#'+s).classList.toggle('hidden', s !== id));
 const msg = t => $('#msg').textContent = t || '';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const get = (r, p) => p.split('.').reduce((o, k) => o && o[k], r);
+const date = v => v ? String(v).slice(0,10) : '';
+const money = v => v == null ? '' : '$' + Number(v).toFixed(2);
 
-// Columns shown in each list
+// What each tab lists, what it searches, how it sorts
 const views = {
-  clients:    { select: 'name,type,billing_email,phone,default_price', cols: ['name','type','billing_email','phone','default_price'] },
-  properties: { select: 'address_line,suburb,postcode,next_due,clients(name)', cols: ['address_line','suburb','postcode','next_due','clients.name'] },
-  jobs:       { select: 'job_type,status,scheduled_start,properties(address_line)', cols: ['properties.address_line','job_type','status','scheduled_start'] },
+  clients: { table:'clients', select:'id,name,type,billing_email,phone', search:'name', order:'name', asc:true,
+    cols:[['Name','name'],['Type','type'],['Billing email','billing_email'],['Phone','phone']] },
+  properties: { table:'properties', select:'id,address_line,suburb,postcode,next_due,tenant_name,clients(name)', search:'address_line', order:'address_line', asc:true, click:true,
+    cols:[['Address','address_line'],['Suburb','suburb'],['Agency','clients.name'],['Tenant','tenant_name'],['Next due','next_due',date]] },
+  jobs: { table:'jobs', select:'id,job_type,status,scheduled_start,notes,locked,properties!inner(address_line,suburb)', search:'properties.address_line', order:'scheduled_start', asc:false,
+    cols:[['Date','scheduled_start',date],['Address','properties.address_line'],['Suburb','properties.suburb'],['Type','job_type'],['Status','status',null,'status'],['Notes','notes']] },
+  certificates: { table:'certificates', select:'number,compliant,issued_at,jobs!inner(properties!inner(address_line,suburb))', search:'number', order:'issued_at', asc:false,
+    cols:[['Number','number'],['Issued','issued_at',date],['Address','jobs.properties.address_line'],['Suburb','jobs.properties.suburb'],['Result','compliant',v => v ? '<span class=good>Compliant</span>' : '<span class=bad>Not compliant</span>', 'html']] },
+  invoices: { table:'invoices', select:'number,amount_ex_gst,gst,status,due_date,clients(name)', search:'number', order:'due_date', asc:false,
+    cols:[['Number','number'],['Client','clients.name'],['Ex GST','amount_ex_gst',money],['GST','gst',money],['Status','status'],['Due','due_date',date]] },
 };
 
 async function start() {
@@ -115,42 +146,104 @@ async function start() {
   if (!data.length) return show('setup');
   companyId = data[0].company_id;
   show('app');
-  loadAll();
+  loadClientPick();
+  loadList();
 }
 
-async function loadAll() {
-  for (const t of Object.keys(views)) await loadList(t);
-  const { data: clients } = await sb.from('clients').select('id,name').order('name');
-  document.querySelectorAll('.clientPick').forEach(s =>
-    s.innerHTML = '<option value="">— client —</option>' + (clients||[]).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join(''));
-  const { data: props } = await sb.from('properties').select('id,address_line').order('address_line');
-  document.querySelectorAll('.propertyPick').forEach(s =>
-    s.innerHTML = '<option value="">— property —</option>' + (props||[]).map(p => `<option value="${p.id}">${esc(p.address_line)}</option>`).join(''));
-}
-
-async function loadList(t) {
-  const v = views[t];
-  const { data, error } = await sb.from(t).select(v.select).order('created_at', { ascending: false });
+async function loadList() {
+  const v = views[tab];
+  let q = sb.from(v.table).select(v.select, { count: 'exact' })
+    .order(v.order, { ascending: v.asc, nullsFirst: false })
+    .range(page * PAGE, page * PAGE + PAGE - 1);
+  if (term) q = q.ilike(v.search, `%${term}%`);
+  const { data, count, error } = await q;
   if (error) return msg(error.message);
-  const get = (r, path) => path.split('.').reduce((o, k) => o && o[k], r) ?? '';
-  $('#list-'+t).innerHTML = '<tr>' + v.cols.map(c => `<th>${c}</th>`).join('') + '</tr>' +
-    data.map(r => '<tr>' + v.cols.map(c => `<td>${esc(get(r,c))}</td>`).join('') + '</tr>').join('');
+  msg('');
+  const pages = Math.max(1, Math.ceil((count || 0) / PAGE));
+  $('#pageInfo').textContent = ` Page ${page + 1} of ${pages} (${count} records) `;
+  $('#prev').disabled = page === 0; $('#next').disabled = page + 1 >= pages;
+  $('#list').innerHTML = '<tr>' + v.cols.map(c => `<th>${c[0]}</th>`).join('') + '</tr>' +
+    data.map(r => `<tr${v.click ? ` class="click" data-id="${r.id}"` : ''}>` + v.cols.map(([, path, fmt, kind]) => {
+      const val = get(r, path);
+      if (kind === 'status' && !r.locked)
+        return `<td><select data-job="${r.id}">${['to_book','booked','in_progress','completed','cancelled','no_access'].map(s => `<option${s===val?' selected':''}>${s}</option>`).join('')}</select></td>`;
+      const out = fmt ? fmt(val) : val;
+      return `<td>${kind === 'html' ? out : esc(out)}</td>`;
+    }).join('') + '</tr>').join('');
 }
 
-function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+// Property detail: info + alarms + history
+async function openProperty(id) {
+  $('#listArea').classList.add('hidden'); $('#detail').classList.remove('hidden');
+  document.querySelectorAll('.tab form').forEach(f => f.classList.add('hidden'));
+  const [{ data: p }, { data: alarms }, { data: jobs }] = await Promise.all([
+    sb.from('properties').select('*,clients(name)').eq('id', id).single(),
+    sb.from('alarms').select('*').eq('property_id', id).order('location'),
+    sb.from('jobs').select('job_type,status,scheduled_start,notes,certificates(number,compliant)').eq('property_id', id).order('scheduled_start', { ascending: false }),
+  ]);
+  const today = new Date().toISOString().slice(0,10);
+  $('#detailBody').innerHTML = `
+    <h2>${esc(p.address_line)}, ${esc(p.suburb)} ${esc(p.postcode)}</h2>
+    <p><b>Agency:</b> ${esc(p.clients?.name)} &nbsp; <b>Next due:</b> ${date(p.next_due)}<br>
+    <b>Tenant:</b> ${esc(p.tenant_name)} ${esc(p.tenant_phone)} ${esc(p.tenant_email)}<br>
+    <b>Lease:</b> ${date(p.lease_start)} → ${date(p.lease_end)}<br>
+    <b>Notes:</b> ${esc(p.access_notes)}</p>
+    <h3>Alarms (${alarms.length})</h3>
+    <table><tr><th>Location</th><th>Type</th><th>Power</th><th>Brand</th><th>Expires</th></tr>
+    ${alarms.map(a => `<tr><td>${esc(a.location)}</td><td>${esc(a.sensor_type)}</td><td>${esc(a.power_source)}</td><td>${esc(a.brand)}</td>
+      <td class="${a.expiry_date && a.expiry_date < today ? 'bad' : ''}">${date(a.expiry_date)}</td></tr>`).join('')}</table>
+    <form id="alarmForm">
+      <input name="location" placeholder="Location e.g. Bedroom 1" required>
+      <select name="sensor_type"><option>photoelectric</option><option>ionisation</option><option>heat</option><option>other</option></select>
+      <select name="power_source"><option>hardwired</option><option>10yr_lithium</option><option>9v</option><option>other</option></select>
+      <input name="brand" placeholder="Brand">
+      <input name="manufacture_date" type="date" title="Manufacture date">
+      <button>Add alarm</button>
+    </form>
+    <h3>Inspection history (${jobs.length})</h3>
+    <table><tr><th>Date</th><th>Type</th><th>Status</th><th>Certificate</th><th>Notes</th></tr>
+    ${jobs.map(j => { const c = j.certificates?.[0] || j.certificates; return `<tr><td>${date(j.scheduled_start)}</td><td>${esc(j.job_type)}</td><td>${esc(j.status)}</td>
+      <td>${c?.number ? esc(c.number) + (c.compliant ? ' <span class=good>✓</span>' : ' <span class=bad>✗</span>') : ''}</td><td>${esc(j.notes)}</td></tr>`; }).join('')}</table>`;
+  $('#alarmForm').onsubmit = async e => {
+    e.preventDefault();
+    const row = { company_id: companyId, property_id: id };
+    for (const [k, v] of new FormData(e.target)) if (v !== '') row[k] = v;
+    const { error } = await sb.from('alarms').insert(row);
+    if (error) return msg(error.message);
+    openProperty(id);
+  };
+}
 
-// Login / sign up
+async function loadClientPick() {
+  const { data } = await sb.from('clients').select('id,name').order('name');
+  document.querySelectorAll('.clientPick').forEach(s =>
+    s.innerHTML = '<option value="">— client —</option>' + (data||[]).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join(''));
+}
+
+// Address search for the job form
+let propMatches = {};
+document.querySelector('.propSearch').addEventListener('input', async e => {
+  const t = e.target.value, hidden = e.target.form.property_id;
+  hidden.value = propMatches[t] || '';
+  if (t.length < 3 || propMatches[t]) return;
+  const { data } = await sb.from('properties').select('id,address_line,suburb').ilike('address_line', `%${t}%`).limit(20);
+  propMatches = {};
+  $('#propList').innerHTML = (data||[]).map(p => { const label = `${p.address_line}, ${p.suburb}`; propMatches[label] = p.id; return `<option value="${esc(label)}">`; }).join('');
+});
+
+// Events
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
   const f = new FormData(e.target), act = e.submitter.value;
   const creds = { email: f.get('email'), password: f.get('password') };
-  const { error } = act === 'up' ? await sb.auth.signUp({ ...creds, options: { emailRedirectTo: location.origin + location.pathname } }) : await sb.auth.signInWithPassword(creds);
+  const { error } = act === 'up'
+    ? await sb.auth.signUp({ ...creds, options: { emailRedirectTo: location.origin + location.pathname } })
+    : await sb.auth.signInWithPassword(creds);
   if (error) return msg(error.message);
   msg(act === 'up' ? 'Check your email to confirm, then sign in.' : '');
   start();
 });
 
-// Company setup
 $('#setupForm').addEventListener('submit', async e => {
   e.preventDefault();
   const f = new FormData(e.target);
@@ -159,19 +252,32 @@ $('#setupForm').addEventListener('submit', async e => {
   start();
 });
 
-// Add-record forms
 document.querySelectorAll('form[data-table]').forEach(form => form.addEventListener('submit', async e => {
   e.preventDefault();
   const row = { company_id: companyId };
   for (const [k, v] of new FormData(form)) if (v !== '') row[k] = v;
+  if (form.dataset.table === 'jobs' && !row.property_id) return msg('Pick an address from the list');
   const { error } = await sb.from(form.dataset.table).insert(row);
   if (error) return msg(error.message);
-  msg(''); form.reset(); loadAll();
+  msg(''); form.reset(); loadList(); if (form.dataset.table === 'clients') loadClientPick();
 }));
 
-// Tabs + logout
-document.querySelectorAll('nav button[data-tab]').forEach(b => b.onclick = () =>
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('hidden', t.id !== 'tab-'+b.dataset.tab)));
+$('#list').addEventListener('click', e => { const tr = e.target.closest('tr.click'); if (tr && e.target.tagName !== 'SELECT') openProperty(tr.dataset.id); });
+$('#list').addEventListener('change', async e => {
+  const id = e.target.dataset.job; if (!id) return;
+  const { error } = await sb.from('jobs').update({ status: e.target.value }).eq('id', id);
+  msg(error ? error.message : '');
+});
+let timer;
+$('#search').addEventListener('input', e => { clearTimeout(timer); timer = setTimeout(() => { term = e.target.value.trim(); page = 0; loadList(); }, 300); });
+$('#prev').onclick = () => { page--; loadList(); };
+$('#next').onclick = () => { page++; loadList(); };
+$('#back').onclick = () => { $('#detail').classList.add('hidden'); $('#listArea').classList.remove('hidden'); document.querySelectorAll('.tab form').forEach(f => f.classList.remove('hidden')); loadList(); };
+document.querySelectorAll('nav button[data-tab]').forEach(b => b.onclick = () => {
+  tab = b.dataset.tab; page = 0; term = ''; $('#search').value = '';
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('hidden', t.id !== 'tab-' + tab));
+  $('#back').onclick();
+});
 $('#logout').onclick = async () => { await sb.auth.signOut(); show('login'); };
 
 start();
