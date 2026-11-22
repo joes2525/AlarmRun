@@ -141,10 +141,12 @@ async function start() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return show('login');
   $('#who').textContent = session.user.email;
-  const { data, error } = await sb.from('memberships').select('company_id').limit(1);
+  const { data, error } = await sb.from('memberships').select('company_id,companies(name)').limit(1);
   if (error) { msg(error.message); return show('setup'); }
   if (!data.length) return show('setup');
   companyId = data[0].company_id;
+  $('#who').textContent = `${data[0].companies?.name || ''} · ${session.user.email}`;
+  document.title = `${data[0].companies?.name || 'AlarmRun'} – Office`;
   show('app');
   loadClientPick();
   loadList();
