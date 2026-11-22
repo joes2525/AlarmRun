@@ -157,7 +157,7 @@
 
   <div id="tab-book" class="tab hidden">
     <h2>Book</h2>
-    <form id="bookForm" hidden>
+    <form id="bookForm" style="display:none">
       <select name="inspector" class="inspPick"></select>
       <input type="date" name="day">
       <span id="bookInfo"></span>
@@ -192,7 +192,7 @@ const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
 const PAGE = 50;
 let companyId = null, tab = 'clients', page = 0, term = '';
 const $ = s => document.querySelector(s);
-const show = id => ['login','setup','app'].forEach(s => $('#'+s).classList.toggle('hidden', s !== id));
+const show = id => { ['login','setup','app'].forEach(s => $('#'+s).classList.toggle('hidden', s !== id)); document.querySelector('body>h1').hidden = id === 'app'; };
 const msg = t => $('#msg').textContent = t || '';
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const get = (r, p) => p.split('.').reduce((o, k) => o && o[k], r);
