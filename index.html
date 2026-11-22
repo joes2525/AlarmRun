@@ -166,7 +166,7 @@
     </form>
     <div style="max-height:45vh;overflow:auto"><table id="readyList" class="grp"></table></div>
     <p style="margin:0;color:#555">Tick what to book, click an inspector's day on the week board, then click <b>Book</b>.</p>
-    <h3><span id="readyHead">Ready to book</span> <button type="button" id="doBook" class="primary">Book</button> <button type="button" id="backToDue">Send ticked back to Due</button></h3>
+    <h3><span id="readyHead">Ready to book</span> <button type="button" id="doBook" class="primary">Book</button> <button type="button" id="unbookDay">Unbook day</button> <button type="button" id="backToDue">Send ticked back to Due</button></h3>
     <h3>Week board <small style="font-weight:normal;color:#555">(click a day to select it)</small></h3>
     <div class="bar"><button type="button" id="wkPrev">◀</button><b id="wkLabel"></b><button type="button" id="wkNext">▶</button></div>
     <table id="week" class="week"></table>
@@ -548,15 +548,22 @@ async function openDay() {
       <td>${label[j.job_type] || esc(j.job_type)}</td><td>${esc(j.status)}</td>
       <td>${j.status === 'booked' ? `<button data-unbook="${j.id}" data-type="${j.job_type}">Unbook</button>` : ''}</td><td>${esc(j.notes)}</td></tr>`).join('') + '</table>';
 }
+// breakdowns go back to Due as a logged breakdown; other bookings are cancelled so the property is due again
+const unbook = (id, type) => sb.from('jobs').update(type === 'callout'
+  ? { status: 'to_book', inspector_id: null, scheduled_start: null, route_order: null }
+  : { status: 'cancelled' }).eq('id', id);
 $('#dayView').onclick = async e => {
   const id = e.target.dataset.unbook; if (!id) return;
-  // breakdowns go back to Due as a logged breakdown; annual bookings are cancelled so the property is due again
-  const change = e.target.dataset.type === 'callout'
-    ? { status: 'to_book', inspector_id: null, scheduled_start: null, route_order: null }
-    : { status: 'cancelled' };
-  const { error } = await sb.from('jobs').update(change).eq('id', id);
+  const { error } = await unbook(id, e.target.dataset.type);
   if (error) return msg(error.message);
   openDay(); loadWeek();
+};
+$('#unbookDay').onclick = async () => {
+  const btns = [...document.querySelectorAll('#dayView [data-unbook]')];
+  if (!btns.length) return msg('Nothing booked to unbook on the selected day (completed jobs stay)');
+  if (!confirm(`Unbook all ${btns.length} booked jobs on this day? They go back to Due.`)) return;
+  for (const b of btns) { const { error } = await unbook(b.dataset.unbook, b.dataset.type); if (error) return msg(error.message); }
+  msg(`Unbooked ${btns.length}`); openDay(); loadWeek();
 };
 const shiftWeek = n => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + n); weekStart = iso(d); loadWeek(); };
 $('#wkPrev').onclick = () => shiftWeek(-7);
