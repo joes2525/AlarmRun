@@ -460,7 +460,9 @@ async function updateBookInfo() {
   const nice = f.day.value ? new Date(f.day.value + 'T00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
   if (!ins || !f.day.value) { $('#bookPick').textContent = 'Pick a day on the week board'; return; }
   const total = (await dayCount(ins.id, f.day.value)) + n;
-  $('#bookPick').innerHTML = `${n} → ${esc(ins.name)}, ${nice} (${total}/${ins.daily_capacity})` +
+  const ag = {}; for (const k of ticked.ready) { const a = readyRows.get(k)?.agency || 'No agent'; ag[a] = (ag[a] || 0) + 1; }
+  const agents = Object.entries(ag).map(([a, c]) => `${esc(a)} ${c}`).join(', ');
+  $('#bookPick').innerHTML = `${n} (${agents}) → ${esc(ins.name)}, ${nice} (${total}/${ins.daily_capacity})` +
     (total > ins.daily_capacity ? ' <span class=bad>over capacity</span>' : '');
 }
 $('#bookForm').inspector.onchange = updateBookInfo;
@@ -501,7 +503,7 @@ async function loadWeek() {
   }
   const dname = d => new Date(d + 'T00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
   const rows = inspectors;   // jobs without an inspector live in Ready to book, not here
-  $('#week').innerHTML = `<tr><th>Inspector</th>${days.map(d => `<th>${dname(d)}</th>`).join('')}<th>Week</th></tr>` +
+  $('#week').innerHTML = `<tr><th>Inspector</th>${days.map(d => `<th>${dname(d)}</th>`).join('')}</tr>` +
     rows.map(i => {
       let wk = 0;
       const tds = days.map(d => {
@@ -510,7 +512,7 @@ async function loadWeek() {
         return `<td data-ins="${i.id}" data-day="${d}">${c ? `<div class="tot ${over ? 'over' : ''}">${c.total}${i.daily_capacity ? '/' + i.daily_capacity : ''}</div>` +
           Object.entries(c.areas).sort((a, b) => b[1] - a[1]).map(([a, n]) => `${esc(a)} (${n})`).join('<br>') : ''}</td>`;
       }).join('');
-      return `<tr><th>${esc(i.name)}</th>${tds}<td class="tot">${wk}</td></tr>`;
+      return `<tr><th>${esc(i.name)}</th>${tds}</tr>`;
     }).join('');
   updateBookInfo();
 }
