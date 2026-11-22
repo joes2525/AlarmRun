@@ -498,7 +498,7 @@ async function loadWeek() {
     c.total++; c.areas[area] = (c.areas[area] || 0) + 1;
   }
   const dname = d => new Date(d + 'T00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
-  const rows = [...inspectors, ...(data.some(j => !j.inspector_id) ? [{ id: 'none', name: 'Unassigned', daily_capacity: 0 }] : [])];
+  const rows = inspectors;   // jobs without an inspector live in Ready to book, not here
   $('#week').innerHTML = `<tr><th>Inspector</th>${days.map(d => `<th>${dname(d)}</th>`).join('')}<th>Week</th></tr>` +
     rows.map(i => {
       let wk = 0;
