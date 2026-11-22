@@ -177,7 +177,8 @@
     <p style="margin:0;color:#555">Tick what to book, click an inspector's day on the week board, then click <b>Book</b>.</p>
     <h3><span id="readyHead">Ready to book</span> <button type="button" id="doBook" class="primary">Book</button> <button type="button" id="unbookDay">Unbook day</button> <button type="button" id="backToDue">Send ticked back to Due</button></h3>
     <h3>Week board <small style="font-weight:normal;color:#555">(click a day to select it)</small></h3>
-    <div class="bar"><button type="button" id="wkPrev">◀</button><b id="wkLabel"></b><button type="button" id="wkNext">▶</button></div>
+    <div class="bar"><button type="button" id="wkPrev">◀</button><b id="wkLabel"></b><button type="button" id="wkNext">▶</button>
+      <button type="button" data-wk="0">This week</button><button type="button" data-wk="7">Next week</button><button type="button" data-wk="14">The week after that</button></div>
     <table id="week" class="week"></table>
     <div id="dayView"></div>
   </div>
@@ -354,7 +355,7 @@ async function openSchedule() {
   const f = $('#dueFilter');
   if (!f.by.value) f.by.value = addDays(14);
   if (!$('#bookForm').day.value) $('#bookForm').day.value = addDays(1);
-  if (!weekStart) { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); weekStart = iso(d); }
+  if (!weekStart) weekStart = planWeek(14);
   if (!inspectors.length) {
     const [{ data: ins }, { data: areas }] = await Promise.all([
       sb.from('inspectors').select('id,name,daily_capacity').eq('active', true).order('name'),
@@ -618,6 +619,9 @@ $('#unbookDay').onclick = async () => {
   msg(error ? error.message : `Unbooked ${btns.length} – back in Ready to book`);
   Promise.all([loadWeek(), renderReady()]);
 };
+// Weeks run Mon–Sun, but planning rolls over on Saturday: "this week" = the Monday-week containing today + 2 days
+const planWeek = offset => { const d = new Date(); d.setDate(d.getDate() + 2); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + offset); return iso(d); };
+document.querySelectorAll('[data-wk]').forEach(b => b.onclick = () => { weekStart = planWeek(+b.dataset.wk); drawWeek(); loadWeek(); });
 const shiftWeek = n => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + n); weekStart = iso(d); drawWeek(); loadWeek(); };
 $('#wkPrev').onclick = () => shiftWeek(-7);
 $('#wkNext').onclick = () => shiftWeek(7);
