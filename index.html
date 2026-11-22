@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AlarmRun – Office</title>
+<style>
+  body{font-family:system-ui,sans-serif;margin:0;padding:16px;max-width:1000px}
+  nav button{margin-right:6px}
+  table{border-collapse:collapse;width:100%;margin-top:10px}
+  td,th{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:14px}
+  form{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;padding:10px;background:#f4f4f4}
+  input,select{padding:5px}
+  .hidden{display:none}
+  #msg{color:#b00}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+</head>
+<body>
+<h1>AlarmRun – Office</h1>
+<p id="msg"></p>
+
+<!-- Login -->
+<section id="login" class="hidden">
+  <form id="loginForm">
+    <input name="email" type="email" placeholder="Email" required>
+    <input name="password" type="password" placeholder="Password" required>
+    <button name="act" value="in">Sign in</button>
+    <button name="act" value="up">Sign up</button>
+  </form>
+</section>
+
+<!-- First-time company setup -->
+<section id="setup" class="hidden">
+  <h2>Set up your company</h2>
+  <form id="setupForm">
+    <input name="company" placeholder="Company name" required>
+    <input name="name" placeholder="Your name" required>
+    <button>Create company</button>
+  </form>
+</section>
+
+<!-- Main app -->
+<section id="app" class="hidden">
+  <nav>
+    <span id="who"></span> |
+    <button data-tab="clients">Clients</button>
+    <button data-tab="properties">Properties</button>
+    <button data-tab="jobs">Jobs</button>
+    <button id="logout">Log out</button>
+  </nav>
+
+  <div id="tab-clients" class="tab">
+    <h2>Clients</h2>
+    <form data-table="clients">
+      <input name="name" placeholder="Agency / landlord name" required>
+      <select name="type"><option>agency</option><option>landlord</option><option>owner_occupier</option><option>other</option></select>
+      <input name="billing_email" type="email" placeholder="Billing email">
+      <input name="phone" placeholder="Phone">
+      <input name="default_price" type="number" step="0.01" placeholder="Price ex GST">
+      <button>Add client</button>
+    </form>
+    <table id="list-clients"></table>
+  </div>
+
+  <div id="tab-properties" class="tab hidden">
+    <h2>Properties</h2>
+    <form data-table="properties">
+      <input name="address_line" placeholder="Street address" required>
+      <input name="suburb" placeholder="Suburb">
+      <input name="postcode" placeholder="Postcode">
+      <select name="client_id" class="clientPick"></select>
+      <input name="tenant_name" placeholder="Tenant name">
+      <input name="tenant_phone" placeholder="Tenant phone">
+      <input name="next_due" type="date" title="Next check due">
+      <button>Add property</button>
+    </form>
+    <table id="list-properties"></table>
+  </div>
+
+  <div id="tab-jobs" class="tab hidden">
+    <h2>Jobs</h2>
+    <form data-table="jobs">
+      <select name="property_id" class="propertyPick" required></select>
+      <select name="job_type"><option>annual</option><option>pre_tenancy</option><option>sale</option><option>install</option><option>callout</option></select>
+      <input name="scheduled_start" type="datetime-local">
+      <select name="status"><option>to_book</option><option>booked</option></select>
+      <button>Add job</button>
+    </form>
+    <table id="list-jobs"></table>
+  </div>
+</section>
+
+<script>
+const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+let companyId = null;
+const $ = s => document.querySelector(s);
+const show = id => ['login','setup','app'].forEach(s => $('#'+s).classList.toggle('hidden', s !== id));
+const msg = t => $('#msg').textContent = t || '';
+
+// Columns shown in each list
+const views = {
+  clients:    { select: 'name,type,billing_email,phone,default_price', cols: ['name','type','billing_email','phone','default_price'] },
+  properties: { select: 'address_line,suburb,postcode,next_due,clients(name)', cols: ['address_line','suburb','postcode','next_due','clients.name'] },
+  jobs:       { select: 'job_type,status,scheduled_start,properties(address_line)', cols: ['properties.address_line','job_type','status','scheduled_start'] },
+};
+
+async function start() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return show('login');
+  $('#who').textContent = session.user.email;
+  const { data } = await sb.from('memberships').select('company_id').limit(1);
+  if (!data || !data.length) return show('setup');
+  companyId = data[0].company_id;
+  show('app');
+  loadAll();
+}
+
+async function loadAll() {
+  for (const t of Object.keys(views)) await loadList(t);
+  const { data: clients } = await sb.from('clients').select('id,name').order('name');
+  document.querySelectorAll('.clientPick').forEach(s =>
+    s.innerHTML = '<option value="">— client —</option>' + (clients||[]).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join(''));
+  const { data: props } = await sb.from('properties').select('id,address_line').order('address_line');
+  document.querySelectorAll('.propertyPick').forEach(s =>
+    s.innerHTML = '<option value="">— property —</option>' + (props||[]).map(p => `<option value="${p.id}">${esc(p.address_line)}</option>`).join(''));
+}
+
+async function loadList(t) {
+  const v = views[t];
+  const { data, error } = await sb.from(t).select(v.select).order('created_at', { ascending: false });
+  if (error) return msg(error.message);
+  const get = (r, path) => path.split('.').reduce((o, k) => o && o[k], r) ?? '';
+  $('#list-'+t).innerHTML = '<tr>' + v.cols.map(c => `<th>${c}</th>`).join('') + '</tr>' +
+    data.map(r => '<tr>' + v.cols.map(c => `<td>${esc(get(r,c))}</td>`).join('') + '</tr>').join('');
+}
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// Login / sign up
+$('#loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = new FormData(e.target), act = e.submitter.value;
+  const creds = { email: f.get('email'), password: f.get('password') };
+  const { error } = act === 'up' ? await sb.auth.signUp(creds) : await sb.auth.signInWithPassword(creds);
+  if (error) return msg(error.message);
+  msg(act === 'up' ? 'Check your email to confirm, then sign in.' : '');
+  start();
+});
+
+// Company setup
+$('#setupForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const { error } = await sb.rpc('create_company', { company_name: f.get('company'), your_name: f.get('name') });
+  if (error) return msg(error.message);
+  start();
+});
+
+// Add-record forms
+document.querySelectorAll('form[data-table]').forEach(form => form.addEventListener('submit', async e => {
+  e.preventDefault();
+  const row = { company_id: companyId };
+  for (const [k, v] of new FormData(form)) if (v !== '') row[k] = v;
+  const { error } = await sb.from(form.dataset.table).insert(row);
+  if (error) return msg(error.message);
+  msg(''); form.reset(); loadAll();
+}));
+
+// Tabs + logout
+document.querySelectorAll('nav button[data-tab]').forEach(b => b.onclick = () =>
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('hidden', t.id !== 'tab-'+b.dataset.tab)));
+$('#logout').onclick = async () => { await sb.auth.signOut(); show('login'); };
+
+start();
+</script>
+</body>
+</html>
