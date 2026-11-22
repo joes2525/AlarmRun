@@ -15,6 +15,7 @@
   #login,#setup,body>h1,#msg{margin:16px}
   table.grp{width:100%}
   table.grp tr:not([class]) td:not(:last-child),table.grp tr.prow td:not(:last-child){white-space:nowrap;width:1%}
+  .dayBox{height:calc(31 * 2.15em);overflow:auto;border:1px solid #ddd}
   .halves{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
   .halves>div{height:250px;overflow:auto;border:1px solid #ddd}
   table.heads tr.prow,table.heads tr:first-child{display:none}
@@ -569,7 +570,7 @@ $('#doBook').onclick = async () => {
 // Open day: the selected inspector's jobs for that day
 async function openDay() {
   const f = $('#bookForm'), ins = inspectors.find(i => i.id === f.inspector.value);
-  if (!ins || !f.day.value) { $('#dayView').innerHTML = ''; return; }
+  if (!ins || !f.day.value) { $('#dayView').innerHTML = '<h3>Pick a day on the week board</h3><div class="dayBox"></div>'; return; }
   const day = f.day.value;
   const { data, error } = await sb.from('jobs').select('id,job_type,status,route_order,notes,properties(address_line,suburb,clients(name))')
     .eq('inspector_id', ins.id).gte('scheduled_start', day + 'T00:00').lte('scheduled_start', day + 'T23:59')
@@ -578,11 +579,11 @@ async function openDay() {
   const nice = new Date(day + 'T00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' });
   const label = { callout: 'Breakdown', annual: 'Annual', pre_tenancy: 'Lease' };
   $('#dayView').innerHTML = `<h3>${esc(ins.name)} – ${nice} (${data.length}/${ins.daily_capacity})</h3>
-    <table class="grp"><tr><th>#</th><th>Address</th><th>Agent</th><th>Area</th><th>Reason</th><th>Status</th><th></th><th>Notes</th></tr>` +
+    <div class="dayBox"><table class="grp"><tr><th>#</th><th>Address</th><th>Agent</th><th>Area</th><th>Reason</th><th>Status</th><th></th><th>Notes</th></tr>` +
     data.map((j, i) => `<tr><td>${i + 1}</td><td>${esc(j.properties?.address_line)}, ${esc(j.properties?.suburb)}</td>
       <td>${esc(j.properties?.clients?.name)}</td><td>${esc(areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || '')}</td>
       <td>${label[j.job_type] || esc(j.job_type)}</td><td>${esc(j.status)}</td>
-      <td>${j.status === 'booked' ? `<button data-unbook="${j.id}" data-type="${j.job_type}">Unbook</button>` : ''}</td><td>${esc(j.notes)}</td></tr>`).join('') + '</table>';
+      <td>${j.status === 'booked' ? `<button data-unbook="${j.id}" data-type="${j.job_type}">Unbook</button>` : ''}</td><td>${esc(j.notes)}</td></tr>`).join('') + '</table></div>';
 }
 // unbooked jobs keep existing but lose their inspector/day, so they land back in Ready to book
 const unbook = ids => sb.from('jobs').update({ status: 'booked', inspector_id: null, scheduled_start: null, route_order: null }).in('id', [].concat(ids));
