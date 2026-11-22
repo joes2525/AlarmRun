@@ -13,6 +13,14 @@
   aside .who{font-size:12px;color:#9aa5b1;margin:6px 0 12px;word-break:break-word}
   main{flex:1;padding:16px;min-width:0}
   #login,#setup,body>h1,#msg{margin:16px}
+  table.grp{width:100%}
+  table.grp tr:not([class]) td:not(:last-child){white-space:nowrap;width:1%}
+  .g0 td{background:#1f2933;color:#fff;font-weight:bold}.g1 td{background:#dde3ea;font-weight:bold}.g2 td{background:#eef1f4;font-weight:600}
+  button.primary{background:#1f6feb;color:#fff;border:0;padding:6px 12px;border-radius:5px}
+  table.week td{min-width:120px;font-size:13px;cursor:pointer}
+  table.week td.sel{outline:2px solid #1f6feb}
+  table.week .tot{font-weight:bold;font-size:15px}
+  table.week .over{color:#b00}
   .board{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:10px}
   .board>div{background:#f4f4f4;padding:8px;border-radius:6px}
   .board ol{padding-left:20px;margin:6px 0;font-size:13px}
@@ -136,17 +144,15 @@
 
   <div id="tab-due" class="tab hidden">
     <h2>Due</h2>
-    <p style="margin:0;color:#555">Tick what you want to schedule (or a whole reason, agent or area heading), then go to <b>Book</b>.</p>
     <form id="dueFilter">
       <label>Due by <input type="date" name="by"></label>
       <input name="area" placeholder="Area, suburb or postcode">
       <select name="group"><option value="agency,reason,area">Group: agent → reason → area</option><option value="area,reason,agency">Group: area → reason → agent</option></select>
       <button>Show</button>
-      <span id="dueInfo"></span> · <b id="selCount">0 selected</b>
-      <button type="button" id="toBook" style="background:#1f6feb;color:#fff;border:0;padding:6px 12px;border-radius:5px">Move to Book →</button>
+      <span id="dueInfo"></span> · <b id="dueCount">0 ticked</b>
+      <button type="button" id="toBook" class="primary">Move to Book →</button>
     </form>
-    <style>#dueList{width:100%}#dueList tr:not([class]) td:not(:last-child){white-space:nowrap;width:1%}#dueList th:last-child{width:auto}.g0 td{background:#1f2933;color:#fff;font-weight:bold}.g1 td{background:#dde3ea;font-weight:bold}.g2 td{background:#eef1f4;font-weight:600}</style>
-    <table id="dueList"></table>
+    <table id="dueList" class="grp"></table>
   </div>
 
   <div id="tab-book" class="tab hidden">
@@ -154,14 +160,15 @@
     <form id="bookForm">
       <select name="inspector" class="inspPick" required></select>
       <input type="date" name="day" required>
-      <button>Book selected</button>
-      <button type="button" id="clearSel">Send all back to Due</button>
+      <button class="primary">Book ticked</button>
+      <button type="button" id="backToDue">Send ticked back to Due</button>
       <span id="bookInfo"></span>
     </form>
-    <details><summary id="selSummary">0 selected</summary><ol id="selList" style="font-size:13px"></ol></details>
-    <h3>Day board</h3>
-    <div class="bar"><label>Day <input type="date" id="boardDay"></label></div>
-    <div class="board" id="board"></div>
+    <h3 id="readyHead">Ready to book</h3>
+    <div style="max-height:45vh;overflow:auto"><table id="readyList" class="grp"></table></div>
+    <h3>Week board <small style="font-weight:normal;color:#555">(click a cell to book into it)</small></h3>
+    <div class="bar"><button type="button" id="wkPrev">◀</button><b id="wkLabel"></b><button type="button" id="wkNext">▶</button></div>
+    <table id="week" class="week"></table>
   </div>
 
   <!-- shared list area -->
@@ -322,71 +329,101 @@ document.querySelectorAll('.propSearch').forEach(inp => inp.addEventListener('in
 }));
 
 // ---------- Scheduling ----------
-const iso = d => d.toISOString().slice(0,10);
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;  // local date
 const addDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };
-let inspectors = [];
-const selected = new Map();   // ticked on Due page: key → {prop, job, label}
-const staged = new Map();     // moved to Book page
-try { for (const [k, v] of JSON.parse(localStorage.getItem('staged') || '[]')) staged.set(k, v); } catch {}
-const saveStaged = () => { try { localStorage.setItem('staged', JSON.stringify([...staged])); } catch {} };
-const selKey = c => c.dataset.job || 'p:' + c.dataset.prop;
+const keyOf = r => r.job_id || 'p:' + r.property_id;
+let inspectors = [], areaOf = {}, weekStart = null;
+const ticked = { due: new Set(), ready: new Set() };
+let dueRows = new Map();
+const staged = new Map();      // rows moved to Book
+try { for (const [k, v] of JSON.parse(localStorage.getItem('staged2') || '[]')) staged.set(k, v); } catch {}
+const saveStaged = () => { try { localStorage.setItem('staged2', JSON.stringify([...staged])); } catch {} };
 
 async function openSchedule() {
   const f = $('#dueFilter');
   if (!f.by.value) f.by.value = addDays(14);
   if (!$('#bookForm').day.value) $('#bookForm').day.value = addDays(1);
-  if (!$('#boardDay').value) $('#boardDay').value = addDays(1);
-  const { data } = await sb.from('inspectors').select('id,name,daily_capacity').eq('active', true).order('name');
-  inspectors = data || [];
-  document.querySelectorAll('.inspPick').forEach(s => s.innerHTML = '<option value="">— inspector —</option>' +
-    inspectors.map(i => `<option value="${i.id}">${esc(i.name)} (${i.daily_capacity}/day)</option>`).join(''));
-  if (tab === 'due') loadDue(); else { showSel(); loadBoard(); }
+  if (!weekStart) { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); weekStart = iso(d); }
+  if (!inspectors.length) {
+    const [{ data: ins }, { data: areas }] = await Promise.all([
+      sb.from('inspectors').select('id,name,daily_capacity').eq('active', true).order('name'),
+      sb.from('suburb_areas').select('suburb,area')]);
+    inspectors = ins || [];
+    (areas || []).forEach(a => areaOf[a.suburb] = a.area);
+    document.querySelectorAll('.inspPick').forEach(s => s.innerHTML = '<option value="">— inspector —</option>' +
+      inspectors.map(i => `<option value="${i.id}">${esc(i.name)} (${i.daily_capacity}/day)</option>`).join(''));
+  }
+  if (tab === 'due') loadDue(); else { renderReady(); loadWeek(); }
 }
 
-async function loadDue() {
-  const f = $('#dueFilter');
-  let q = sb.from('schedule_queue').select('reason,property_id,job_id,address_line,suburb,postcode,agency,area,last_done,due_date,notes', { count: 'exact' })
-    .lte('due_date', f.by.value).order('due_date').limit(3000);
-  const a = f.area.value.trim();
-  if (a) q = /^\d+$/.test(a) ? q.eq('postcode', a) : q.or(`area.ilike.%${a}%,suburb.ilike.%${a}%`);
-  const { data, count, error } = await q;
-  if (error) return msg(error.message);
-  const today = iso(new Date()), [k0, k1, k2] = f.group.value.split(',');
-  const tree = {};
-  const rowsLeft = data.filter(r => !staged.has(r.job_id || 'p:' + r.property_id));
-  for (const r of rowsLeft) (((tree[r[k0] || '—'] ??= {})[r[k1] || '—'] ??= {})[r[k2] || '—'] ??= []).push(r);
+// Grouped table used by both Due and Ready to book
+function renderGrouped(rows, el, which, groupBy) {
+  const today = iso(new Date()), [k0, k1, k2] = groupBy.split(','), tree = {};
+  for (const r of rows) (((tree[r[k0] || '—'] ??= {})[r[k1] || '—'] ??= {})[r[k2] || '—'] ??= []).push(r);
   const n = o => Array.isArray(o) ? o.length : Object.values(o).reduce((t, v) => t + n(v), 0);
   const order = (o, key) => key === 'reason'
     ? ['Breakdown', 'Annual'].filter(x => o[x]).concat(Object.keys(o).filter(x => !['Breakdown', 'Annual'].includes(x)))
     : Object.keys(o).sort((x, y) => n(o[y]) - n(o[x]));
-  let html = '<tr><th></th><th>Address</th><th>Last done</th><th>Due</th><th>Notes</th></tr>', gi = 0;
   const head = (cls, id, label, pad) => `<tr class="${cls}"><td><input type="checkbox" data-group="${id}"></td><td colspan="4">${pad}${label}</td></tr>`;
+  let html = '<tr><th></th><th>Address</th><th>Last done</th><th>Due</th><th>Notes</th></tr>', gi = 0;
   for (const a0 of order(tree, k0)) {
-    const id0 = 'r' + (gi++);
-    html += head('g0', id0, `${esc(a0)} — ${n(tree[a0])}`, '');
+    const id0 = which + (gi++); html += head('g0', id0, `${esc(a0)} — ${n(tree[a0])}`, '');
     for (const a1 of order(tree[a0], k1)) {
-      const id1 = 'g' + (gi++);
-      html += head('g1', id1, `${esc(a1)} — ${n(tree[a0][a1])}`, '&nbsp;&nbsp;');
+      const id1 = which + (gi++); html += head('g1', id1, `${esc(a1)} — ${n(tree[a0][a1])}`, '&nbsp;&nbsp;');
       for (const a2 of order(tree[a0][a1], k2)) {
-        const id2 = 'g' + (gi++), rows = tree[a0][a1][a2]
+        const id2 = which + (gi++), list = tree[a0][a1][a2]
           .sort((x, y) => (x.suburb || '').localeCompare(y.suburb || '') || x.address_line.localeCompare(y.address_line));
-        html += head('g2', id2, `${esc(a2)} — ${rows.length}`, '&nbsp;&nbsp;&nbsp;&nbsp;');
-        html += rows.map(r => `<tr><td><input type="checkbox" class="pick ${id0} ${id1} ${id2}" data-prop="${r.property_id}" data-job="${r.job_id || ''}" data-label="${esc(r.reason + ': ' + r.address_line + ', ' + r.suburb)}"${selected.has(r.job_id || 'p:' + r.property_id) ? ' checked' : ''}></td>
+        html += head('g2', id2, `${esc(a2)} — ${list.length}`, '&nbsp;&nbsp;&nbsp;&nbsp;');
+        html += list.map(r => `<tr><td><input type="checkbox" class="pick ${id0} ${id1} ${id2}" data-key="${keyOf(r)}"${ticked[which].has(keyOf(r)) ? ' checked' : ''}></td>
           <td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td>${date(r.last_done)}</td>
           <td class="${r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td><td>${esc(r.notes)}</td></tr>`).join('');
       }
     }
   }
-  $('#dueInfo').textContent = `${rowsLeft.length} waiting` + (staged.size ? ` (${staged.size} moved to Book)` : '') + (count > 3000 ? ' (showing 3000)' : '');
-  $('#dueList').innerHTML = html;
-  $('#dueList').onchange = e => {
+  el.innerHTML = rows.length ? html : '<tr><td>Nothing here.</td></tr>';
+  el.onchange = e => {
     const g = e.target.dataset.group;
-    const boxes = g ? [...document.querySelectorAll('.pick.' + g)] : e.target.classList.contains('pick') ? [e.target] : [];
-    boxes.forEach(c => { c.checked = e.target.checked; c.checked ? selected.set(selKey(c), { prop: c.dataset.prop, job: c.dataset.job, label: c.dataset.label }) : selected.delete(selKey(c)); });
-    showSel();
+    const boxes = g ? [...el.querySelectorAll('.pick.' + g)] : e.target.classList.contains('pick') ? [e.target] : [];
+    boxes.forEach(c => { c.checked = e.target.checked; c.checked ? ticked[which].add(c.dataset.key) : ticked[which].delete(c.dataset.key); });
+    counts();
   };
-  showSel();
+  counts();
 }
+
+function counts() {
+  $('#dueCount').textContent = `${ticked.due.size} ticked`;
+  $('#readyHead').textContent = `Ready to book — ${staged.size} (${ticked.ready.size} ticked)`;
+  updateBookInfo();
+}
+
+async function loadDue() {
+  const f = $('#dueFilter');
+  let q = sb.from('schedule_queue').select('reason,property_id,job_id,address_line,suburb,postcode,agency,area,last_done,due_date,notes')
+    .lte('due_date', f.by.value).order('due_date').limit(3000);
+  const a = f.area.value.trim();
+  if (a) q = /^\d+$/.test(a) ? q.eq('postcode', a) : q.or(`area.ilike.%${a}%,suburb.ilike.%${a}%`);
+  const { data, error } = await q;
+  if (error) return msg(error.message);
+  const rows = data.filter(r => !staged.has(keyOf(r)));
+  dueRows = new Map(rows.map(r => [keyOf(r), r]));
+  $('#dueInfo').textContent = `${rows.length} waiting` + (staged.size ? ` · ${staged.size} on Book` : '');
+  renderGrouped(rows, $('#dueList'), 'due', f.group.value);
+}
+
+const renderReady = () => renderGrouped([...staged.values()], $('#readyList'), 'ready', 'agency,reason,area');
+
+$('#toBook').onclick = () => {
+  if (!ticked.due.size) return msg('Tick some properties first');
+  const n = ticked.due.size;
+  for (const k of ticked.due) if (dueRows.has(k)) staged.set(k, dueRows.get(k));
+  ticked.due.clear(); saveStaged(); loadDue();
+  msg(`Moved ${n} to Book`);
+};
+$('#backToDue').onclick = () => {
+  if (!ticked.ready.size) return msg('Tick some on the Ready to book list first');
+  for (const k of ticked.ready) staged.delete(k);
+  ticked.ready.clear(); saveStaged(); renderReady(); msg('Sent back to Due');
+};
 
 async function dayCount(inspectorId, day) {
   const { count } = await sb.from('jobs').select('id', { count: 'exact', head: true })
@@ -395,74 +432,74 @@ async function dayCount(inspectorId, day) {
   return count || 0;
 }
 
-function showSel() {
-  $('#selCount').textContent = `${selected.size} selected`;
-  $('#selSummary').textContent = `${staged.size} ready to book`;
-  $('#selList').innerHTML = [...staged.values()].map(v => `<li>${esc(v.label)}</li>`).join('');
-  updateBookInfo();
-}
-$('#toBook').onclick = () => {
-  if (!selected.size) return msg('Tick some properties first');
-  const n = selected.size;
-  for (const [k, v] of selected) staged.set(k, v);
-  selected.clear(); saveStaged(); loadDue();
-  msg(`Moved ${n} to Book (${staged.size} waiting there)`);
-};
-$('#clearSel').onclick = () => { staged.clear(); saveStaged(); showSel(); msg('Returned to Due'); };
-
 async function updateBookInfo() {
-  const f = $('#bookForm'), n = staged.size;
+  const f = $('#bookForm'), n = ticked.ready.size;
   const ins = inspectors.find(i => i.id === f.inspector.value);
-  if (!ins || !f.day.value) return $('#bookInfo').textContent = `${n} selected`;
-  const have = await dayCount(ins.id, f.day.value), total = have + n;
-  $('#bookInfo').innerHTML = `${n} selected · ${esc(ins.name)} on ${f.day.value}: ${total}/${ins.daily_capacity}` +
+  document.querySelectorAll('#week td.sel').forEach(td => td.classList.remove('sel'));
+  document.querySelector(`#week td[data-ins="${f.inspector.value}"][data-day="${f.day.value}"]`)?.classList.add('sel');
+  if (!ins || !f.day.value) return $('#bookInfo').textContent = '';
+  const total = (await dayCount(ins.id, f.day.value)) + n;
+  $('#bookInfo').innerHTML = `${esc(ins.name)} on ${f.day.value}: ${total}/${ins.daily_capacity}` +
     (total > ins.daily_capacity ? ' <span class=bad>over capacity</span>' : '');
 }
 $('#bookForm').inspector.onchange = updateBookInfo;
 $('#bookForm').day.onchange = updateBookInfo;
-
 $('#dueFilter').onsubmit = e => { e.preventDefault(); loadDue(); };
 $('#dueFilter').group.onchange = loadDue;
+
 $('#bookForm').onsubmit = async e => {
   e.preventDefault();
-  const f = e.target, picks = [...staged.values()];
-  if (!picks.length) return msg('Nothing to book – move properties across from the Due page first');
+  const f = e.target, picks = [...ticked.ready].map(k => staged.get(k)).filter(Boolean);
+  if (!picks.length) return msg('Tick some on the Ready to book list first');
   const when = `${f.day.value}T09:00:00`, start = await dayCount(f.inspector.value, f.day.value);
-  const fresh = picks.filter(c => !c.job).map((c, i) => ({ company_id: companyId, property_id: c.prop, job_type: 'annual',
+  const fresh = picks.filter(r => !r.job_id).map((r, i) => ({ company_id: companyId, property_id: r.property_id, job_type: 'annual',
     status: 'booked', inspector_id: f.inspector.value, scheduled_start: when, route_order: start + i + 1 }));
   if (fresh.length) { const { error } = await sb.from('jobs').insert(fresh); if (error) return msg(error.message); }
-  const existing = picks.filter(c => c.job);
-  for (const [i, c] of existing.entries()) {
+  for (const [i, r] of picks.filter(r => r.job_id).entries()) {
     const { error } = await sb.from('jobs').update({ status: 'booked', inspector_id: f.inspector.value, scheduled_start: when,
-      route_order: start + fresh.length + i + 1 }).eq('id', c.job);
+      route_order: start + fresh.length + i + 1 }).eq('id', r.job_id);
     if (error) return msg(error.message);
   }
-  msg(`Booked ${picks.length}`); staged.clear(); saveStaged(); showSel(); $('#boardDay').value = f.day.value; loadBoard();
+  for (const r of picks) staged.delete(keyOf(r));
+  ticked.ready.clear(); saveStaged(); renderReady(); loadWeek();
+  msg(`Booked ${picks.length}`);
 };
 
-async function loadBoard() {
-  const day = $('#boardDay').value;
-  const { data, error } = await sb.from('jobs').select('id,status,inspector_id,route_order,properties(address_line,suburb)')
-    .gte('scheduled_start', day + 'T00:00').lte('scheduled_start', day + 'T23:59').neq('status', 'cancelled')
-    .order('route_order');
+// Week board: inspectors down, days across; each cell = total + areas (count)
+async function loadWeek() {
+  const days = [...Array(7)].map((_, i) => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + i); return iso(d); });
+  $('#wkLabel').textContent = ` Week of ${weekStart} `;
+  const { data, error } = await sb.from('jobs').select('inspector_id,scheduled_start,properties(suburb)')
+    .gte('scheduled_start', days[0] + 'T00:00').lte('scheduled_start', days[6] + 'T23:59').neq('status', 'cancelled');
   if (error) return msg(error.message);
-  const cols = [...inspectors, { id: null, name: 'Unassigned', daily_capacity: '' }];
-  $('#board').innerHTML = cols.map(i => {
-    const js = data.filter(j => j.inspector_id === i.id);
-    if (!i.id && !js.length) return '';
-    const over = i.daily_capacity && js.length > i.daily_capacity;
-    return `<div><b>${esc(i.name)}</b> <span class="${over ? 'bad' : ''}">${js.length}${i.daily_capacity ? '/' + i.daily_capacity : ''}</span>
-      <ol>${js.map(j => `<li>${esc(j.properties?.address_line)}, ${esc(j.properties?.suburb)} <small>(${j.status})</small>
-        <button data-unbook="${j.id}" title="Cancel">✕</button></li>`).join('')}</ol></div>`;
-  }).join('');
+  const cell = {};   // ins|day → {total, areas:{}}
+  for (const j of data) {
+    const c = cell[(j.inspector_id || 'none') + '|' + j.scheduled_start.slice(0,10)] ??= { total: 0, areas: {} };
+    const area = areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || 'No area';
+    c.total++; c.areas[area] = (c.areas[area] || 0) + 1;
+  }
+  const dname = d => new Date(d + 'T00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+  const rows = [...inspectors, ...(data.some(j => !j.inspector_id) ? [{ id: 'none', name: 'Unassigned', daily_capacity: 0 }] : [])];
+  $('#week').innerHTML = `<tr><th>Inspector</th>${days.map(d => `<th>${dname(d)}</th>`).join('')}<th>Week</th></tr>` +
+    rows.map(i => {
+      let wk = 0;
+      const tds = days.map(d => {
+        const c = cell[i.id + '|' + d]; wk += c?.total || 0;
+        const over = c && i.daily_capacity && c.total > i.daily_capacity;
+        return `<td data-ins="${i.id}" data-day="${d}">${c ? `<div class="tot ${over ? 'over' : ''}">${c.total}${i.daily_capacity ? '/' + i.daily_capacity : ''}</div>` +
+          Object.entries(c.areas).sort((a, b) => b[1] - a[1]).map(([a, n]) => `${esc(a)} (${n})`).join('<br>') : ''}</td>`;
+      }).join('');
+      return `<tr><th>${esc(i.name)}</th>${tds}<td class="tot">${wk}</td></tr>`;
+    }).join('');
+  updateBookInfo();
 }
-$('#boardDay').onchange = loadBoard;
-$('#board').onclick = async e => {
-  const id = e.target.dataset.unbook; if (!id) return;
-  const { error } = await sb.from('jobs').update({ status: 'cancelled' }).eq('id', id);
-  if (error) return msg(error.message);
-  loadBoard(); loadDue();
+$('#week').onclick = e => {
+  const td = e.target.closest('td[data-day]'); if (!td || td.dataset.ins === 'none') return;
+  $('#bookForm').inspector.value = td.dataset.ins; $('#bookForm').day.value = td.dataset.day; updateBookInfo();
 };
+const shiftWeek = n => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + n); weekStart = iso(d); loadWeek(); };
+$('#wkPrev').onclick = () => shiftWeek(-7);
+$('#wkNext').onclick = () => shiftWeek(7);
 
 // Events
 $('#loginForm').addEventListener('submit', async e => {
