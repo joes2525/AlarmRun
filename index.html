@@ -143,7 +143,7 @@
       <select name="group"><option value="agency,reason,area">Group: agent → reason → area</option><option value="area,reason,agency">Group: area → reason → agent</option></select>
       <button>Show</button>
       <span id="dueInfo"></span> · <b id="selCount">0 selected</b>
-      <button type="button" id="toBook" style="background:#1f6feb;color:#fff;border:0;padding:6px 12px;border-radius:5px">Book selected →</button>
+      <button type="button" id="toBook" style="background:#1f6feb;color:#fff;border:0;padding:6px 12px;border-radius:5px">Move to Book →</button>
     </form>
     <style>#dueList{width:100%}#dueList tr:not([class]) td:not(:last-child){white-space:nowrap;width:1%}#dueList th:last-child{width:auto}.g0 td{background:#1f2933;color:#fff;font-weight:bold}.g1 td{background:#dde3ea;font-weight:bold}.g2 td{background:#eef1f4;font-weight:600}</style>
     <table id="dueList"></table>
@@ -155,7 +155,7 @@
       <select name="inspector" class="inspPick" required></select>
       <input type="date" name="day" required>
       <button>Book selected</button>
-      <button type="button" id="clearSel">Clear selection</button>
+      <button type="button" id="clearSel">Send all back to Due</button>
       <span id="bookInfo"></span>
     </form>
     <details><summary id="selSummary">0 selected</summary><ol id="selList" style="font-size:13px"></ol></details>
@@ -325,7 +325,10 @@ document.querySelectorAll('.propSearch').forEach(inp => inp.addEventListener('in
 const iso = d => d.toISOString().slice(0,10);
 const addDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };
 let inspectors = [];
-const selected = new Map();   // key → {prop, job, label}
+const selected = new Map();   // ticked on Due page: key → {prop, job, label}
+const staged = new Map();     // moved to Book page
+try { for (const [k, v] of JSON.parse(localStorage.getItem('staged') || '[]')) staged.set(k, v); } catch {}
+const saveStaged = () => { try { localStorage.setItem('staged', JSON.stringify([...staged])); } catch {} };
 const selKey = c => c.dataset.job || 'p:' + c.dataset.prop;
 
 async function openSchedule() {
@@ -350,7 +353,8 @@ async function loadDue() {
   if (error) return msg(error.message);
   const today = iso(new Date()), [k0, k1, k2] = f.group.value.split(',');
   const tree = {};
-  for (const r of data) (((tree[r[k0] || '—'] ??= {})[r[k1] || '—'] ??= {})[r[k2] || '—'] ??= []).push(r);
+  const rowsLeft = data.filter(r => !staged.has(r.job_id || 'p:' + r.property_id));
+  for (const r of rowsLeft) (((tree[r[k0] || '—'] ??= {})[r[k1] || '—'] ??= {})[r[k2] || '—'] ??= []).push(r);
   const n = o => Array.isArray(o) ? o.length : Object.values(o).reduce((t, v) => t + n(v), 0);
   const order = (o, key) => key === 'reason'
     ? ['Breakdown', 'Annual'].filter(x => o[x]).concat(Object.keys(o).filter(x => !['Breakdown', 'Annual'].includes(x)))
@@ -373,7 +377,7 @@ async function loadDue() {
       }
     }
   }
-  $('#dueInfo').textContent = `${count} waiting` + (count > 3000 ? ' (showing 3000)' : '');
+  $('#dueInfo').textContent = `${rowsLeft.length} waiting` + (staged.size ? ` (${staged.size} moved to Book)` : '') + (count > 3000 ? ' (showing 3000)' : '');
   $('#dueList').innerHTML = html;
   $('#dueList').onchange = e => {
     const g = e.target.dataset.group;
@@ -392,15 +396,22 @@ async function dayCount(inspectorId, day) {
 }
 
 function showSel() {
-  $('#selCount').textContent = $('#selSummary').textContent = `${selected.size} selected`;
-  $('#selList').innerHTML = [...selected.values()].map(v => `<li>${esc(v.label)}</li>`).join('');
+  $('#selCount').textContent = `${selected.size} selected`;
+  $('#selSummary').textContent = `${staged.size} ready to book`;
+  $('#selList').innerHTML = [...staged.values()].map(v => `<li>${esc(v.label)}</li>`).join('');
   updateBookInfo();
 }
-$('#toBook').onclick = () => selected.size ? document.querySelector('aside button[data-tab="book"]').click() : msg('Tick some properties first');
-$('#clearSel').onclick = () => { selected.clear(); showSel(); };
+$('#toBook').onclick = () => {
+  if (!selected.size) return msg('Tick some properties first');
+  const n = selected.size;
+  for (const [k, v] of selected) staged.set(k, v);
+  selected.clear(); saveStaged(); loadDue();
+  msg(`Moved ${n} to Book (${staged.size} waiting there)`);
+};
+$('#clearSel').onclick = () => { staged.clear(); saveStaged(); showSel(); msg('Returned to Due'); };
 
 async function updateBookInfo() {
-  const f = $('#bookForm'), n = selected.size;
+  const f = $('#bookForm'), n = staged.size;
   const ins = inspectors.find(i => i.id === f.inspector.value);
   if (!ins || !f.day.value) return $('#bookInfo').textContent = `${n} selected`;
   const have = await dayCount(ins.id, f.day.value), total = have + n;
@@ -414,8 +425,8 @@ $('#dueFilter').onsubmit = e => { e.preventDefault(); loadDue(); };
 $('#dueFilter').group.onchange = loadDue;
 $('#bookForm').onsubmit = async e => {
   e.preventDefault();
-  const f = e.target, picks = [...selected.values()];
-  if (!picks.length) return msg('Nothing selected – tick properties on the Due page first');
+  const f = e.target, picks = [...staged.values()];
+  if (!picks.length) return msg('Nothing to book – move properties across from the Due page first');
   const when = `${f.day.value}T09:00:00`, start = await dayCount(f.inspector.value, f.day.value);
   const fresh = picks.filter(c => !c.job).map((c, i) => ({ company_id: companyId, property_id: c.prop, job_type: 'annual',
     status: 'booked', inspector_id: f.inspector.value, scheduled_start: when, route_order: start + i + 1 }));
@@ -426,7 +437,7 @@ $('#bookForm').onsubmit = async e => {
       route_order: start + fresh.length + i + 1 }).eq('id', c.job);
     if (error) return msg(error.message);
   }
-  msg(`Booked ${picks.length}`); selected.clear(); showSel(); $('#boardDay').value = f.day.value; loadBoard();
+  msg(`Booked ${picks.length}`); staged.clear(); saveStaged(); showSel(); $('#boardDay').value = f.day.value; loadBoard();
 };
 
 async function loadBoard() {
