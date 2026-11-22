@@ -369,28 +369,32 @@ async function openSchedule() {
 
 // Grouped table used by both Due and Ready to book
 function renderGrouped(rows, el, which, groupBy) {
-  const today = iso(new Date()), [k0, k1, k2] = groupBy.split(','), tree = {};
-  for (const r of rows) (((tree[r[k0] || '—'] ??= {})[r[k1] || '—'] ??= {})[r[k2] || '—'] ??= []).push(r);
+  const today = iso(new Date()), keys = groupBy.split(',');
   const n = o => Array.isArray(o) ? o.length : Object.values(o).reduce((t, v) => t + n(v), 0);
   const order = (o, key) => key === 'reason'
     ? ['Breakdown', 'Annual'].filter(x => o[x]).concat(Object.keys(o).filter(x => !['Breakdown', 'Annual'].includes(x)))
     : Object.keys(o).sort((x, y) => n(o[y]) - n(o[x]));
-  const head = (cls, id, label, pad) => `<tr class="${cls}"><td><input type="checkbox" data-group="${id}"></td><td colspan="4" data-focus="${id}" data-label="${label}">${pad}${label}</td></tr>`;
-  let html = '<tr><th></th><th>Address</th><th>Last done</th><th>Due</th><th>Notes</th></tr>', gi = 0;
-  for (const a0 of order(tree, k0)) {
-    const id0 = which + (gi++); html += head('g0', id0, `${esc(a0)} — ${n(tree[a0])}`, '');
-    for (const a1 of order(tree[a0], k1)) {
-      const id1 = which + (gi++); html += head('g1', id1, `${esc(a1)} — ${n(tree[a0][a1])}`, '&nbsp;&nbsp;');
-      for (const a2 of order(tree[a0][a1], k2)) {
-        const id2 = which + (gi++), list = tree[a0][a1][a2]
-          .sort((x, y) => (x.suburb || '').localeCompare(y.suburb || '') || x.address_line.localeCompare(y.address_line));
-        html += head('g2', id2, `${esc(a2)} — ${list.length}`, '&nbsp;&nbsp;&nbsp;&nbsp;');
-        html += list.map(r => `<tr class="prow"><td><input type="checkbox" class="pick ${id0} ${id1} ${id2}" data-key="${keyOf(r)}"${ticked[which].has(keyOf(r)) ? ' checked' : ''}></td>
-          <td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td>${date(r.last_done)}</td>
-          <td class="${r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td><td>${esc(r.notes)}</td></tr>`).join('');
-      }
-    }
+  const tree = {};
+  for (const r of rows) {
+    let node = tree;
+    keys.forEach((k, i) => { const v = r[k] || '—'; node = node[v] ??= (i === keys.length - 1 ? [] : {}); });
+    node.push(r);
   }
+  const cls = ['g0', 'g1', 'g2'];
+  let html = '<tr><th></th><th>Address</th><th>Last done</th><th>Due</th><th>Notes</th></tr>', gi = 0;
+  const walk = (node, lvl, ids) => {
+    for (const k of order(node, keys[lvl])) {
+      const id = which + (gi++), child = node[k], all = [...ids, id];
+      html += `<tr class="${cls[lvl]}"><td><input type="checkbox" data-group="${id}"></td><td colspan="4" data-focus="${id}" data-label="${esc(k)}">${'&nbsp;&nbsp;'.repeat(lvl)}${esc(k)} — ${n(child)}</td></tr>`;
+      if (Array.isArray(child)) {
+        child.sort((x, y) => (x.suburb || '').localeCompare(y.suburb || '') || x.address_line.localeCompare(y.address_line));
+        html += child.map(r => `<tr class="prow"><td><input type="checkbox" class="pick ${all.join(' ')}" data-key="${keyOf(r)}"${ticked[which].has(keyOf(r)) ? ' checked' : ''}></td>
+          <td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td>${date(r.last_done)}</td>
+          <td class="${r.due_date && r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td><td>${esc(r.notes)}</td></tr>`).join('');
+      } else walk(child, lvl + 1, all);
+    }
+  };
+  walk(tree, 0, []);
   el.innerHTML = rows.length ? html : '<tr><td>Nothing here.</td></tr>';
   el.onchange = e => {
     const g = e.target.dataset.group;
@@ -450,6 +454,7 @@ async function loadDue() {
 
 // Ready to book = what you moved from Due + any open jobs that have no inspector yet
 let readyRows = new Map();
+const drawReady = () => renderGrouped([...readyRows.values()], $('#readyList'), 'ready', 'agency,area');
 async function renderReady() {
   const { data, error } = await sb.from('jobs')
     .select('id,property_id,job_type,status,scheduled_start,notes,properties(address_line,suburb,postcode,clients(name))')
@@ -463,7 +468,7 @@ async function renderReady() {
       last_done: null, due_date: j.scheduled_start ? j.scheduled_start.slice(0,10) : null,
       notes: [j.scheduled_start ? 'Unassigned job' : 'Unbooked job', j.notes].filter(Boolean).join(' – ') }));
   readyRows = new Map([...staged, ...unassigned.map(r => [keyOf(r), r])]);
-  renderGrouped([...readyRows.values()], $('#readyList'), 'ready', 'agency,reason,area');
+  drawReady();
 }
 
 $('#toBook').onclick = () => {
@@ -511,53 +516,62 @@ $('#bookForm').onsubmit = async e => {
   e.preventDefault();
   const f = e.target, picks = [...ticked.ready].map(k => readyRows.get(k)).filter(Boolean);
   if (!picks.length) return msg('Tick some on the Ready to book list first');
-  const when = `${f.day.value}T09:00:00`, start = await dayCount(f.inspector.value, f.day.value);
-  const fresh = picks.filter(r => !r.job_id).map((r, i) => ({ company_id: companyId, property_id: r.property_id, job_type: 'annual',
-    status: 'booked', inspector_id: f.inspector.value, scheduled_start: when, route_order: start + i + 1 }));
-  if (fresh.length) { const { error } = await sb.from('jobs').insert(fresh); if (error) return msg(error.message); }
-  const jobIds = picks.filter(r => r.job_id).map(r => r.job_id);
-  if (jobIds.length) {   // one request for all existing jobs
-    const { error } = await sb.from('jobs').update({ status: 'booked', inspector_id: f.inspector.value, scheduled_start: when }).in('id', jobIds);
-    if (error) return msg(error.message);
+  const insId = f.inspector.value, day = f.day.value, when = `${day}T09:00:00`;
+  // step 1: update the screen straight away
+  for (const r of picks) {
+    readyRows.delete(keyOf(r)); staged.delete(keyOf(r));
+    weekJobs.push({ id: null, ins: insId, day, area: r.area || 'No area', agent: r.agency || 'No agent' });
   }
-  for (const r of picks) staged.delete(keyOf(r));
-  ticked.ready.clear(); saveStaged();
-  msg(`Booked ${picks.length}`);
+  ticked.ready.clear(); saveStaged(); drawReady(); drawWeek();
+  msg(`Booking ${picks.length}…`);
+  // step 2: save, then refresh from the database
+  const fresh = picks.filter(r => !r.job_id).map(r => ({ company_id: companyId, property_id: r.property_id, job_type: 'annual',
+    status: 'booked', inspector_id: insId, scheduled_start: when }));
+  const jobIds = picks.filter(r => r.job_id).map(r => r.job_id);
+  const results = await Promise.all([
+    fresh.length ? sb.from('jobs').insert(fresh) : {},
+    jobIds.length ? sb.from('jobs').update({ status: 'booked', inspector_id: insId, scheduled_start: when }).in('id', jobIds) : {}]);
+  const err = results.find(r => r.error)?.error;
+  msg(err ? 'Booking failed: ' + err.message : `Booked ${picks.length}`);
   Promise.all([renderReady(), loadWeek()]);
 };
 
 // Week board: inspectors down, days across; each cell = total + areas (count)
+let weekJobs = [];   // cached jobs for the visible week
+const weekDays = () => [...Array(7)].map((_, i) => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + i); return iso(d); });
 async function loadWeek() {
-  const days = [...Array(7)].map((_, i) => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + i); return iso(d); });
-  $('#wkLabel').textContent = ` Week of ${weekStart} `;
-  const { data, error } = await sb.from('jobs').select('inspector_id,scheduled_start,properties(suburb)')
+  const days = weekDays();
+  const { data, error } = await sb.from('jobs').select('id,inspector_id,scheduled_start,properties(suburb,clients(name))')
     .gte('scheduled_start', days[0] + 'T00:00').lte('scheduled_start', days[6] + 'T23:59').in('status', ['booked', 'in_progress']);
   if (error) return msg(error.message);
-  const cell = {};   // ins|day → {total, areas:{}}
-  for (const j of data) {
-    const c = cell[(j.inspector_id || 'none') + '|' + j.scheduled_start.slice(0,10)] ??= { total: 0, areas: {} };
-    const area = areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || 'No area';
-    c.total++; c.areas[area] = (c.areas[area] || 0) + 1;
+  weekJobs = data.map(j => ({ id: j.id, ins: j.inspector_id, day: j.scheduled_start.slice(0,10),
+    area: areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || 'No area', agent: j.properties?.clients?.name || 'No agent' }));
+  drawWeek(); openDay();
+}
+function drawWeek() {
+  const days = weekDays();
+  $('#wkLabel').textContent = ` Week of ${weekStart} `;
+  const cell = {};   // ins|day → {total, areas:{area:{n, agents:{}}}}
+  for (const j of weekJobs) {
+    const c = cell[j.ins + '|' + j.day] ??= { total: 0, areas: {} };
+    const a = c.areas[j.area] ??= { n: 0, agents: {} };
+    c.total++; a.n++; a.agents[j.agent] = (a.agents[j.agent] || 0) + 1;
   }
   const dname = d => new Date(d + 'T00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
-  const rows = inspectors;   // jobs without an inspector live in Ready to book, not here
+  const f = $('#bookForm');
   $('#week').innerHTML = `<tr><th>Inspector</th>${days.map(d => `<th>${dname(d)}</th>`).join('')}</tr>` +
-    rows.map(i => {
-      let wk = 0;
-      const tds = days.map(d => {
-        const c = cell[i.id + '|' + d]; wk += c?.total || 0;
-        const over = c && i.daily_capacity && c.total > i.daily_capacity;
-        return `<td data-ins="${i.id}" data-day="${d}">${c ? `<div class="tot ${over ? 'over' : ''}">${c.total}${i.daily_capacity ? '/' + i.daily_capacity : ''}</div>` +
-          Object.entries(c.areas).sort((a, b) => b[1] - a[1]).map(([a, n]) => `${esc(a)} (${n})`).join('<br>') : ''}</td>`;
-      }).join('');
-      return `<tr><th>${esc(i.name)}</th>${tds}</tr>`;
-    }).join('');
-  updateBookInfo(); openDay();
+    inspectors.map(i => `<tr><th>${esc(i.name)}</th>${days.map(d => {
+      const c = cell[i.id + '|' + d], over = c && c.total > i.daily_capacity;
+      const sel = f.inspector.value === i.id && f.day.value === d ? ' class="sel"' : '';
+      return `<td data-ins="${i.id}" data-day="${d}"${sel}>${c ? `<div class="tot ${over ? 'over' : ''}">${c.total}/${i.daily_capacity}</div>` +
+        Object.entries(c.areas).sort((x, y) => y[1].n - x[1].n).map(([a, v]) => `${esc(a)} (${v.n})` +
+          Object.entries(v.agents).sort((x, y) => y[1] - x[1]).map(([g, k]) => `<br><i style="color:#555">&nbsp;&nbsp;${esc(g)} (${k})</i>`).join('')).join('<br>') : ''}</td>`;
+    }).join('')}</tr>`).join('');
 }
 $('#week').onclick = e => {
   const td = e.target.closest('td[data-day]'); if (!td) return;
   $('#bookForm').inspector.value = td.dataset.ins; $('#bookForm').day.value = td.dataset.day;
-  updateBookInfo(); openDay();
+  drawWeek(); openDay();
 };
 $('#doBook').onclick = async () => {
   const f = $('#bookForm'), ins = inspectors.find(i => i.id === f.inspector.value);
@@ -589,19 +603,22 @@ async function openDay() {
 const unbook = ids => sb.from('jobs').update({ status: 'booked', inspector_id: null, scheduled_start: null, route_order: null }).in('id', [].concat(ids));
 $('#dayView').onclick = async e => {
   const id = e.target.dataset.unbook; if (!id) return;
+  e.target.closest('tr').remove(); weekJobs = weekJobs.filter(j => j.id !== id); drawWeek();
   const { error } = await unbook(id);
-  if (error) return msg(error.message);
-  Promise.all([openDay(), loadWeek(), renderReady()]);
+  if (error) msg(error.message);
+  Promise.all([loadWeek(), renderReady()]);
 };
 $('#unbookDay').onclick = async () => {
   const btns = [...document.querySelectorAll('#dayView [data-unbook]')];
   if (!btns.length) return msg('Nothing booked to unbook on the selected day (completed jobs stay)');
   if (!confirm(`Unbook all ${btns.length} booked jobs on this day? They go back to Ready to book.`)) return;
-  const { error } = await unbook(btns.map(b => b.dataset.unbook));
-  if (error) return msg(error.message);
-  msg(`Unbooked ${btns.length} – back in Ready to book`); Promise.all([openDay(), loadWeek(), renderReady()]);
+  const ids = btns.map(b => b.dataset.unbook);
+  btns.forEach(b => b.closest('tr').remove()); weekJobs = weekJobs.filter(j => !ids.includes(j.id)); drawWeek();
+  const { error } = await unbook(ids);
+  msg(error ? error.message : `Unbooked ${btns.length} – back in Ready to book`);
+  Promise.all([loadWeek(), renderReady()]);
 };
-const shiftWeek = n => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + n); weekStart = iso(d); loadWeek(); };
+const shiftWeek = n => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + n); weekStart = iso(d); drawWeek(); loadWeek(); };
 $('#wkPrev').onclick = () => shiftWeek(-7);
 $('#wkNext').onclick = () => shiftWeek(7);
 
