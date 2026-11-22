@@ -54,7 +54,8 @@
 <section id="app" class="hidden">
   <aside>
     <b>AlarmRun</b><div class="who" id="who"></div>
-    <button data-tab="schedule">Schedule</button>
+    <button data-tab="due">Due</button>
+    <button data-tab="book">Book</button>
     <button data-tab="clients">Clients</button>
     <button data-tab="properties">Properties</button>
     <button data-tab="tenants">Tenants</button>
@@ -133,27 +134,31 @@
     </form>
   </div>
 
-  <div id="tab-schedule" class="tab hidden">
-    <h2>Schedule</h2>
-    <h3>1. Waiting to be booked</h3>
-    <p style="margin:0;color:#555">Tick a reason, agent or area heading to select all its properties.</p>
+  <div id="tab-due" class="tab hidden">
+    <h2>Due</h2>
+    <p style="margin:0;color:#555">Tick what you want to schedule (or a whole reason, agent or area heading), then go to <b>Book</b>.</p>
     <form id="dueFilter">
       <label>Due by <input type="date" name="by"></label>
       <input name="area" placeholder="Area, suburb or postcode">
       <select name="group"><option value="agency,area">Group: agent → area</option><option value="area,agency">Group: area → agent</option></select>
       <button>Show</button>
-      <span id="dueInfo"></span>
+      <span id="dueInfo"></span> · <b id="selCount">0 selected</b>
     </form>
-    <style>.g0 td{background:#1f2933;color:#fff;font-weight:bold}.g1 td{background:#dde3ea;font-weight:bold}.g2 td{background:#eef1f4;font-weight:600}</style>
-    <div style="max-height:420px;overflow:auto"><table id="dueList"></table></div>
-    <h3>2. Book selected</h3>
+    <style>#dueList{width:auto}.g0 td{background:#1f2933;color:#fff;font-weight:bold}.g1 td{background:#dde3ea;font-weight:bold}.g2 td{background:#eef1f4;font-weight:600}</style>
+    <table id="dueList"></table>
+  </div>
+
+  <div id="tab-book" class="tab hidden">
+    <h2>Book</h2>
     <form id="bookForm">
       <select name="inspector" class="inspPick" required></select>
       <input type="date" name="day" required>
       <button>Book selected</button>
+      <button type="button" id="clearSel">Clear selection</button>
       <span id="bookInfo"></span>
     </form>
-    <h3>3. Day board</h3>
+    <details><summary id="selSummary">0 selected</summary><ol id="selList" style="font-size:13px"></ol></details>
+    <h3>Day board</h3>
     <div class="bar"><label>Day <input type="date" id="boardDay"></label></div>
     <div class="board" id="board"></div>
   </div>
@@ -219,7 +224,7 @@ async function start() {
   document.title = `${data[0].companies?.name || 'AlarmRun'} – Office`;
   show('app');
   loadClientPick();
-  document.querySelector('aside button[data-tab="schedule"]').click();
+  document.querySelector('aside button[data-tab="due"]').click();
 }
 
 async function loadList() {
@@ -319,6 +324,8 @@ document.querySelectorAll('.propSearch').forEach(inp => inp.addEventListener('in
 const iso = d => d.toISOString().slice(0,10);
 const addDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };
 let inspectors = [];
+const selected = new Map();   // key → {prop, job, label}
+const selKey = c => c.dataset.job || 'p:' + c.dataset.prop;
 
 async function openSchedule() {
   const f = $('#dueFilter');
@@ -329,7 +336,7 @@ async function openSchedule() {
   inspectors = data || [];
   document.querySelectorAll('.inspPick').forEach(s => s.innerHTML = '<option value="">— inspector —</option>' +
     inspectors.map(i => `<option value="${i.id}">${esc(i.name)} (${i.daily_capacity}/day)</option>`).join(''));
-  loadDue(); loadBoard();
+  if (tab === 'due') loadDue(); else { showSel(); loadBoard(); }
 }
 
 async function loadDue() {
@@ -357,7 +364,7 @@ async function loadDue() {
         const id2 = 'g' + (gi++), rows = tree[reason][g1][g2]
           .sort((x, y) => (x.suburb || '').localeCompare(y.suburb || '') || x.address_line.localeCompare(y.address_line));
         html += head('g2', id2, `${esc(g2)} — ${rows.length}`, '&nbsp;&nbsp;&nbsp;&nbsp;');
-        html += rows.map(r => `<tr><td><input type="checkbox" class="pick ${id0} ${id1} ${id2}" data-prop="${r.property_id}" data-job="${r.job_id || ''}"></td>
+        html += rows.map(r => `<tr><td><input type="checkbox" class="pick ${id0} ${id1} ${id2}" data-prop="${r.property_id}" data-job="${r.job_id || ''}" data-label="${esc(r.reason + ': ' + r.address_line + ', ' + r.suburb)}"${selected.has(r.job_id || 'p:' + r.property_id) ? ' checked' : ''}></td>
           <td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td>${date(r.last_done)}</td>
           <td class="${r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td><td>${esc(r.notes)}</td></tr>`).join('');
       }
@@ -367,10 +374,11 @@ async function loadDue() {
   $('#dueList').innerHTML = html;
   $('#dueList').onchange = e => {
     const g = e.target.dataset.group;
-    if (g) document.querySelectorAll('.pick.' + g).forEach(c => c.checked = e.target.checked);
-    updateBookInfo();
+    const boxes = g ? [...document.querySelectorAll('.pick.' + g)] : e.target.classList.contains('pick') ? [e.target] : [];
+    boxes.forEach(c => { c.checked = e.target.checked; c.checked ? selected.set(selKey(c), { prop: c.dataset.prop, job: c.dataset.job, label: c.dataset.label }) : selected.delete(selKey(c)); });
+    showSel();
   };
-  updateBookInfo();
+  showSel();
 }
 
 async function dayCount(inspectorId, day) {
@@ -380,8 +388,15 @@ async function dayCount(inspectorId, day) {
   return count || 0;
 }
 
+function showSel() {
+  $('#selCount').textContent = $('#selSummary').textContent = `${selected.size} selected`;
+  $('#selList').innerHTML = [...selected.values()].map(v => `<li>${esc(v.label)}</li>`).join('');
+  updateBookInfo();
+}
+$('#clearSel').onclick = () => { selected.clear(); showSel(); };
+
 async function updateBookInfo() {
-  const f = $('#bookForm'), n = document.querySelectorAll('.pick:checked').length;
+  const f = $('#bookForm'), n = selected.size;
   const ins = inspectors.find(i => i.id === f.inspector.value);
   if (!ins || !f.day.value) return $('#bookInfo').textContent = `${n} selected`;
   const have = await dayCount(ins.id, f.day.value), total = have + n;
@@ -395,19 +410,19 @@ $('#dueFilter').onsubmit = e => { e.preventDefault(); loadDue(); };
 $('#dueFilter').group.onchange = loadDue;
 $('#bookForm').onsubmit = async e => {
   e.preventDefault();
-  const f = e.target, picks = [...document.querySelectorAll('.pick:checked')];
-  if (!picks.length) return msg('Tick some properties first');
+  const f = e.target, picks = [...selected.values()];
+  if (!picks.length) return msg('Nothing selected – tick properties on the Due page first');
   const when = `${f.day.value}T09:00:00`, start = await dayCount(f.inspector.value, f.day.value);
-  const fresh = picks.filter(c => !c.dataset.job).map((c, i) => ({ company_id: companyId, property_id: c.dataset.prop, job_type: 'annual',
+  const fresh = picks.filter(c => !c.job).map((c, i) => ({ company_id: companyId, property_id: c.prop, job_type: 'annual',
     status: 'booked', inspector_id: f.inspector.value, scheduled_start: when, route_order: start + i + 1 }));
   if (fresh.length) { const { error } = await sb.from('jobs').insert(fresh); if (error) return msg(error.message); }
-  const existing = picks.filter(c => c.dataset.job);
+  const existing = picks.filter(c => c.job);
   for (const [i, c] of existing.entries()) {
     const { error } = await sb.from('jobs').update({ status: 'booked', inspector_id: f.inspector.value, scheduled_start: when,
-      route_order: start + fresh.length + i + 1 }).eq('id', c.dataset.job);
+      route_order: start + fresh.length + i + 1 }).eq('id', c.job);
     if (error) return msg(error.message);
   }
-  msg(''); $('#boardDay').value = f.day.value; loadDue(); loadBoard();
+  msg(`Booked ${picks.length}`); selected.clear(); showSel(); $('#boardDay').value = f.day.value; loadBoard();
 };
 
 async function loadBoard() {
@@ -481,7 +496,7 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   document.querySelectorAll('aside button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('hidden', t.id !== 'tab-' + tab));
   $('#detail').classList.add('hidden');
-  if (tab === 'schedule') { $('#listArea').classList.add('hidden'); return openSchedule(); }
+  if (tab === 'due' || tab === 'book') { $('#listArea').classList.add('hidden'); return openSchedule(); }
   $('#back').onclick();
 });
 $('#logout').onclick = async () => { await sb.auth.signOut(); show('login'); };
