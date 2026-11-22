@@ -136,12 +136,15 @@
   <div id="tab-schedule" class="tab hidden">
     <h2>Schedule</h2>
     <h3>1. Due for annual inspection</h3>
+    <p style="margin:0;color:#555">Tick a whole agent or area heading to select all its properties.</p>
     <form id="dueFilter">
       <label>Due by <input type="date" name="by"></label>
-      <input name="area" placeholder="Suburb or postcode">
+      <input name="area" placeholder="Area, suburb or postcode">
+      <select name="group"><option value="agency,area">Group: agent → area</option><option value="area,agency">Group: area → agent</option></select>
       <button>Show</button>
       <span id="dueInfo"></span>
     </form>
+    <style>.g1 td{background:#dde3ea;font-weight:bold}.g2 td{background:#eef1f4;font-weight:600}</style>
     <div style="max-height:420px;overflow:auto"><table id="dueList"></table></div>
     <h3>2. Book selected</h3>
     <form id="bookForm">
@@ -312,7 +315,7 @@ let inspectors = [];
 
 async function openSchedule() {
   const f = $('#dueFilter');
-  if (!f.by.value) f.by.value = addDays(30);
+  if (!f.by.value) f.by.value = addDays(14);
   if (!$('#bookForm').day.value) $('#bookForm').day.value = addDays(1);
   if (!$('#boardDay').value) $('#boardDay').value = addDays(1);
   const { data } = await sb.from('inspectors').select('id,name,daily_capacity').eq('active', true).order('name');
@@ -324,20 +327,41 @@ async function openSchedule() {
 
 async function loadDue() {
   const f = $('#dueFilter');
-  let q = sb.from('property_due').select('id,address_line,suburb,postcode,agency,last_done,due_date', { count: 'exact' })
+  let q = sb.from('property_due').select('id,address_line,suburb,postcode,agency,area,last_done,due_date', { count: 'exact' })
     .lte('due_date', f.by.value).eq('has_open_job', false)
-    .order('postcode', { nullsFirst: false }).order('suburb').order('due_date').limit(500);
+    .order('due_date').limit(3000);
   const a = f.area.value.trim();
-  if (a) q = /^\d+$/.test(a) ? q.eq('postcode', a) : q.ilike('suburb', `%${a}%`);
+  if (a) q = /^\d+$/.test(a) ? q.eq('postcode', a) : q.or(`area.ilike.%${a}%,suburb.ilike.%${a}%`);
   const { data, count, error } = await q;
   if (error) return msg(error.message);
-  const today = iso(new Date());
-  $('#dueInfo').textContent = `${count} due${count > 500 ? ' (showing first 500)' : ''}`;
-  $('#dueList').innerHTML = '<tr><th><input type="checkbox" id="allDue"></th><th>Address</th><th>Suburb</th><th>Postcode</th><th>Agency</th><th>Last done</th><th>Due</th></tr>' +
-    data.map(r => `<tr><td><input type="checkbox" class="pick" value="${r.id}"></td><td>${esc(r.address_line)}</td><td>${esc(r.suburb)}</td><td>${esc(r.postcode)}</td>
-      <td>${esc(r.agency)}</td><td>${date(r.last_done)}</td><td class="${r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td></tr>`).join('');
-  $('#allDue').onchange = e => document.querySelectorAll('.pick').forEach(c => c.checked = e.target.checked);
-  $('#dueList').onchange = updateBookInfo;
+  const today = iso(new Date()), [k1, k2] = f.group.value.split(',');
+  // group → subgroup → rows
+  const groups = {};
+  for (const r of data) {
+    const g1 = r[k1] || '—', g2 = r[k2] || '—';
+    ((groups[g1] ??= {})[g2] ??= []).push(r);
+  }
+  const n = o => Object.values(o).reduce((t, v) => t + (Array.isArray(v) ? v.length : n(v)), 0);
+  let html = '<tr><th></th><th>Address</th><th>Suburb</th><th>Postcode</th><th>Last done</th><th>Due</th></tr>';
+  let gi = 0;
+  for (const g1 of Object.keys(groups).sort((x, y) => n(groups[y]) - n(groups[x]))) {
+    const id1 = 'g' + (gi++);
+    html += `<tr class="g1"><td><input type="checkbox" data-group="${id1}"></td><td colspan="5">${esc(g1)} — ${n(groups[g1])}</td></tr>`;
+    for (const g2 of Object.keys(groups[g1]).sort((x, y) => groups[g1][y].length - groups[g1][x].length)) {
+      const rows = groups[g1][g2].sort((x, y) => (x.suburb || '').localeCompare(y.suburb || '') || x.address_line.localeCompare(y.address_line));
+      const id2 = id1 + '-' + (gi++);
+      html += `<tr class="g2"><td><input type="checkbox" data-group="${id2}"></td><td colspan="5">&nbsp;&nbsp;${esc(g2)} — ${rows.length}</td></tr>`;
+      html += rows.map(r => `<tr><td><input type="checkbox" class="pick ${id1} ${id2}" value="${r.id}"></td><td>${esc(r.address_line)}</td><td>${esc(r.suburb)}</td><td>${esc(r.postcode)}</td>
+        <td>${date(r.last_done)}</td><td class="${r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td></tr>`).join('');
+    }
+  }
+  $('#dueInfo').textContent = `${count} due` + (count > 3000 ? ' (showing 3000)' : '');
+  $('#dueList').innerHTML = html;
+  $('#dueList').onchange = e => {
+    const g = e.target.dataset.group;
+    if (g) document.querySelectorAll('.pick.' + g).forEach(c => c.checked = e.target.checked);
+    updateBookInfo();
+  };
   updateBookInfo();
 }
 
@@ -360,6 +384,7 @@ $('#bookForm').inspector.onchange = updateBookInfo;
 $('#bookForm').day.onchange = updateBookInfo;
 
 $('#dueFilter').onsubmit = e => { e.preventDefault(); loadDue(); };
+$('#dueFilter').group.onchange = loadDue;
 $('#bookForm').onsubmit = async e => {
   e.preventDefault();
   const f = e.target, ids = [...document.querySelectorAll('.pick:checked')].map(c => c.value);
