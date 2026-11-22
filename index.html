@@ -135,8 +135,8 @@
 
   <div id="tab-schedule" class="tab hidden">
     <h2>Schedule</h2>
-    <h3>1. Due for annual inspection</h3>
-    <p style="margin:0;color:#555">Tick a whole agent or area heading to select all its properties.</p>
+    <h3>1. Waiting to be booked</h3>
+    <p style="margin:0;color:#555">Tick a reason, agent or area heading to select all its properties.</p>
     <form id="dueFilter">
       <label>Due by <input type="date" name="by"></label>
       <input name="area" placeholder="Area, suburb or postcode">
@@ -144,7 +144,7 @@
       <button>Show</button>
       <span id="dueInfo"></span>
     </form>
-    <style>.g1 td{background:#dde3ea;font-weight:bold}.g2 td{background:#eef1f4;font-weight:600}</style>
+    <style>.g0 td{background:#1f2933;color:#fff;font-weight:bold}.g1 td{background:#dde3ea;font-weight:bold}.g2 td{background:#eef1f4;font-weight:600}</style>
     <div style="max-height:420px;overflow:auto"><table id="dueList"></table></div>
     <h3>2. Book selected</h3>
     <form id="bookForm">
@@ -261,6 +261,7 @@ async function openProperty(id) {
     <b>Tenant:</b> ${esc(p.tenant_name)} ${esc(p.tenant_phone)} ${esc(p.tenant_email)}<br>
     <b>Lease:</b> ${date(p.lease_start)} → ${date(p.lease_end)}<br>
     <b>Notes:</b> ${esc(p.access_notes)}</p>
+    <form id="breakdownForm"><input name="notes" placeholder="Breakdown details e.g. hallway alarm beeping" size="45" required><button>Log breakdown</button></form>
     <h3>Tenancies (${ten.length})</h3>
     <table><tr><th>Tenants</th><th>Mobile</th><th>Email</th><th>Move in</th><th>Lease</th><th>Vacate</th><th>PM</th></tr>
     ${ten.map(t => `<tr><td>${esc(t.tenant_names)}</td><td>${esc(t.mobile)}</td><td>${esc(t.email)}</td><td>${date(t.move_in)}</td>
@@ -281,6 +282,12 @@ async function openProperty(id) {
     <table><tr><th>Date</th><th>Type</th><th>Status</th><th>Certificate</th><th>Notes</th></tr>
     ${jobs.map(j => { const c = j.certificates?.[0] || j.certificates; return `<tr><td>${date(j.scheduled_start)}</td><td>${esc(j.job_type)}</td><td>${esc(j.status)}</td>
       <td>${c?.number ? esc(c.number) + (c.compliant ? ' <span class=good>✓</span>' : ' <span class=bad>✗</span>') : ''}</td><td>${esc(j.notes)}</td></tr>`; }).join('')}</table>`;
+  $('#breakdownForm').onsubmit = async e => {
+    e.preventDefault();
+    const { error } = await sb.from('jobs').insert({ company_id: companyId, property_id: id, job_type: 'callout', status: 'to_book', notes: e.target.notes.value });
+    if (error) return msg(error.message);
+    msg('Breakdown logged – it is now in Schedule'); openProperty(id);
+  };
   $('#alarmForm').onsubmit = async e => {
     e.preventDefault();
     const row = { company_id: companyId, property_id: id };
@@ -327,35 +334,36 @@ async function openSchedule() {
 
 async function loadDue() {
   const f = $('#dueFilter');
-  let q = sb.from('property_due').select('id,address_line,suburb,postcode,agency,area,last_done,due_date', { count: 'exact' })
-    .lte('due_date', f.by.value).eq('has_open_job', false)
-    .order('due_date').limit(3000);
+  let q = sb.from('schedule_queue').select('reason,property_id,job_id,address_line,suburb,postcode,agency,area,last_done,due_date,notes', { count: 'exact' })
+    .lte('due_date', f.by.value).order('due_date').limit(3000);
   const a = f.area.value.trim();
   if (a) q = /^\d+$/.test(a) ? q.eq('postcode', a) : q.or(`area.ilike.%${a}%,suburb.ilike.%${a}%`);
   const { data, count, error } = await q;
   if (error) return msg(error.message);
   const today = iso(new Date()), [k1, k2] = f.group.value.split(',');
-  // group → subgroup → rows
-  const groups = {};
-  for (const r of data) {
-    const g1 = r[k1] || '—', g2 = r[k2] || '—';
-    ((groups[g1] ??= {})[g2] ??= []).push(r);
-  }
-  const n = o => Object.values(o).reduce((t, v) => t + (Array.isArray(v) ? v.length : n(v)), 0);
-  let html = '<tr><th></th><th>Address</th><th>Suburb</th><th>Postcode</th><th>Last done</th><th>Due</th></tr>';
-  let gi = 0;
-  for (const g1 of Object.keys(groups).sort((x, y) => n(groups[y]) - n(groups[x]))) {
-    const id1 = 'g' + (gi++);
-    html += `<tr class="g1"><td><input type="checkbox" data-group="${id1}"></td><td colspan="5">${esc(g1)} — ${n(groups[g1])}</td></tr>`;
-    for (const g2 of Object.keys(groups[g1]).sort((x, y) => groups[g1][y].length - groups[g1][x].length)) {
-      const rows = groups[g1][g2].sort((x, y) => (x.suburb || '').localeCompare(y.suburb || '') || x.address_line.localeCompare(y.address_line));
-      const id2 = id1 + '-' + (gi++);
-      html += `<tr class="g2"><td><input type="checkbox" data-group="${id2}"></td><td colspan="5">&nbsp;&nbsp;${esc(g2)} — ${rows.length}</td></tr>`;
-      html += rows.map(r => `<tr><td><input type="checkbox" class="pick ${id1} ${id2}" value="${r.id}"></td><td>${esc(r.address_line)}</td><td>${esc(r.suburb)}</td><td>${esc(r.postcode)}</td>
-        <td>${date(r.last_done)}</td><td class="${r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td></tr>`).join('');
+  const tree = {};   // reason → group → subgroup → rows
+  for (const r of data) (((tree[r.reason] ??= {})[r[k1] || '—'] ??= {})[r[k2] || '—'] ??= []).push(r);
+  const n = o => Array.isArray(o) ? o.length : Object.values(o).reduce((t, v) => t + n(v), 0);
+  const bySize = o => Object.keys(o).sort((x, y) => n(o[y]) - n(o[x]));
+  let html = '<tr><th></th><th>Address</th><th>Last done</th><th>Due</th><th>Notes</th></tr>', gi = 0;
+  const head = (cls, id, label, pad) => `<tr class="${cls}"><td><input type="checkbox" data-group="${id}"></td><td colspan="4">${pad}${label}</td></tr>`;
+  for (const reason of ['Breakdown', 'Annual'].filter(x => tree[x])) {
+    const id0 = 'r' + (gi++);
+    html += head('g0', id0, `${reason} — ${n(tree[reason])}`, '');
+    for (const g1 of bySize(tree[reason])) {
+      const id1 = 'g' + (gi++);
+      html += head('g1', id1, `${esc(g1)} — ${n(tree[reason][g1])}`, '&nbsp;&nbsp;');
+      for (const g2 of bySize(tree[reason][g1])) {
+        const id2 = 'g' + (gi++), rows = tree[reason][g1][g2]
+          .sort((x, y) => (x.suburb || '').localeCompare(y.suburb || '') || x.address_line.localeCompare(y.address_line));
+        html += head('g2', id2, `${esc(g2)} — ${rows.length}`, '&nbsp;&nbsp;&nbsp;&nbsp;');
+        html += rows.map(r => `<tr><td><input type="checkbox" class="pick ${id0} ${id1} ${id2}" data-prop="${r.property_id}" data-job="${r.job_id || ''}"></td>
+          <td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td>${date(r.last_done)}</td>
+          <td class="${r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td><td>${esc(r.notes)}</td></tr>`).join('');
+      }
     }
   }
-  $('#dueInfo').textContent = `${count} due` + (count > 3000 ? ' (showing 3000)' : '');
+  $('#dueInfo').textContent = `${count} waiting` + (count > 3000 ? ' (showing 3000)' : '');
   $('#dueList').innerHTML = html;
   $('#dueList').onchange = e => {
     const g = e.target.dataset.group;
@@ -387,12 +395,18 @@ $('#dueFilter').onsubmit = e => { e.preventDefault(); loadDue(); };
 $('#dueFilter').group.onchange = loadDue;
 $('#bookForm').onsubmit = async e => {
   e.preventDefault();
-  const f = e.target, ids = [...document.querySelectorAll('.pick:checked')].map(c => c.value);
-  if (!ids.length) return msg('Tick some properties first');
-  const rows = ids.map((pid, i) => ({ company_id: companyId, property_id: pid, job_type: 'annual', status: 'booked',
-    inspector_id: f.inspector.value, scheduled_start: `${f.day.value}T09:00:00`, route_order: i + 1 }));
-  const { error } = await sb.from('jobs').insert(rows);
-  if (error) return msg(error.message);
+  const f = e.target, picks = [...document.querySelectorAll('.pick:checked')];
+  if (!picks.length) return msg('Tick some properties first');
+  const when = `${f.day.value}T09:00:00`, start = await dayCount(f.inspector.value, f.day.value);
+  const fresh = picks.filter(c => !c.dataset.job).map((c, i) => ({ company_id: companyId, property_id: c.dataset.prop, job_type: 'annual',
+    status: 'booked', inspector_id: f.inspector.value, scheduled_start: when, route_order: start + i + 1 }));
+  if (fresh.length) { const { error } = await sb.from('jobs').insert(fresh); if (error) return msg(error.message); }
+  const existing = picks.filter(c => c.dataset.job);
+  for (const [i, c] of existing.entries()) {
+    const { error } = await sb.from('jobs').update({ status: 'booked', inspector_id: f.inspector.value, scheduled_start: when,
+      route_order: start + fresh.length + i + 1 }).eq('id', c.dataset.job);
+    if (error) return msg(error.message);
+  }
   msg(''); $('#boardDay').value = f.day.value; loadDue(); loadBoard();
 };
 
