@@ -5,8 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
 <style>
-  body{font-family:system-ui,sans-serif;margin:0;padding:16px;max-width:1200px}
-  nav button{margin-right:6px}
+  body{font-family:system-ui,sans-serif;margin:0}
+  #app{display:flex;min-height:100vh}
+  aside{width:190px;flex:none;background:#1f2933;color:#fff;padding:12px;display:flex;flex-direction:column;gap:4px}
+  aside button{background:none;border:0;color:#cfd8e3;text-align:left;padding:8px 10px;border-radius:6px;font-size:15px;cursor:pointer}
+  aside button:hover,aside button.on{background:#323f4b;color:#fff}
+  aside .who{font-size:12px;color:#9aa5b1;margin:6px 0 12px;word-break:break-word}
+  main{flex:1;padding:16px;min-width:0}
+  #login,#setup,body>h1,#msg{margin:16px}
+  .board{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:10px}
+  .board>div{background:#f4f4f4;padding:8px;border-radius:6px}
+  .board ol{padding-left:20px;margin:6px 0;font-size:13px}
   table{border-collapse:collapse;width:100%;margin-top:10px}
   td,th{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:14px;vertical-align:top}
   tr.click{cursor:pointer} tr.click:hover{background:#eef}
@@ -43,16 +52,19 @@
 </section>
 
 <section id="app" class="hidden">
-  <nav>
-    <span id="who"></span> |
+  <aside>
+    <b>AlarmRun</b><div class="who" id="who"></div>
+    <button data-tab="schedule">Schedule</button>
     <button data-tab="clients">Clients</button>
     <button data-tab="properties">Properties</button>
     <button data-tab="tenants">Tenants</button>
     <button data-tab="jobs">Jobs</button>
     <button data-tab="certificates">Certificates</button>
     <button data-tab="invoices">Invoices</button>
-    <button id="logout">Log out</button>
-  </nav>
+    <button data-tab="inspectors">Inspectors</button>
+    <button id="logout" style="margin-top:auto">Log out</button>
+  </aside>
+  <main>
 
   <div id="tab-clients" class="tab">
     <h2>Clients</h2>
@@ -110,6 +122,38 @@
 
   <div id="tab-certificates" class="tab hidden"><h2>Certificates</h2></div>
   <div id="tab-invoices" class="tab hidden"><h2>Invoices</h2></div>
+  <div id="tab-inspectors" class="tab hidden">
+    <h2>Inspectors</h2>
+    <form data-table="inspectors">
+      <input name="name" placeholder="Name" required>
+      <input name="phone" placeholder="Phone">
+      <input name="base_suburb" placeholder="Home suburb">
+      <input name="daily_capacity" type="number" placeholder="Jobs per day" value="18">
+      <button>Add inspector</button>
+    </form>
+  </div>
+
+  <div id="tab-schedule" class="tab hidden">
+    <h2>Schedule</h2>
+    <h3>1. Due for annual inspection</h3>
+    <form id="dueFilter">
+      <label>Due by <input type="date" name="by"></label>
+      <input name="area" placeholder="Suburb or postcode">
+      <button>Show</button>
+      <span id="dueInfo"></span>
+    </form>
+    <div style="max-height:420px;overflow:auto"><table id="dueList"></table></div>
+    <h3>2. Book selected</h3>
+    <form id="bookForm">
+      <select name="inspector" class="inspPick" required></select>
+      <input type="date" name="day" required>
+      <button>Book selected</button>
+      <span id="bookInfo"></span>
+    </form>
+    <h3>3. Day board</h3>
+    <div class="bar"><label>Day <input type="date" id="boardDay"></label></div>
+    <div class="board" id="board"></div>
+  </div>
 
   <!-- shared list area -->
   <div id="listArea">
@@ -125,6 +169,7 @@
     <p><button id="back">← Back to list</button></p>
     <div id="detailBody"></div>
   </div>
+  </main>
 </section>
 
 <script>
@@ -149,8 +194,10 @@ const views = {
     cols:[['Address','address_line'],['Suburb','suburb'],['Agency','clients.name'],['Tenant','tenant_name'],['Next due','next_due',date]] },
   tenants: { table:'tenancies', select:'id,tenant_names,mobile,email,lease_start,lease_end,vacate_date,property_id,properties!inner(address_line,suburb)', search:'tenant_names', order:'lease_end', asc:false, click:'property_id',
     cols:[['Address','properties.address_line'],['Suburb','properties.suburb'],['Tenants','tenant_names'],['Mobile','mobile'],['Email','email'],['Lease start','lease_start',date],['Lease end','lease_end',leaseEnd,'html'],['Vacate','vacate_date',date]] },
-  jobs: { table:'jobs', select:'id,job_type,status,scheduled_start,notes,locked,properties!inner(address_line,suburb)', search:'properties.address_line', order:'scheduled_start', asc:false,
-    cols:[['Date','scheduled_start',date],['Address','properties.address_line'],['Suburb','properties.suburb'],['Type','job_type'],['Status','status',null,'status'],['Notes','notes']] },
+  inspectors: { table:'inspectors', select:'name,phone,base_suburb,daily_capacity,active', search:'name', order:'name', asc:true,
+    cols:[['Name','name'],['Phone','phone'],['Home suburb','base_suburb'],['Jobs/day','daily_capacity'],['Active','active']] },
+  jobs: { table:'jobs', select:'id,job_type,status,scheduled_start,notes,locked,inspectors(name),properties!inner(address_line,suburb)', search:'properties.address_line', order:'scheduled_start', asc:false,
+    cols:[['Date','scheduled_start',date],['Address','properties.address_line'],['Suburb','properties.suburb'],['Type','job_type'],['Inspector','inspectors.name'],['Status','status',null,'status'],['Notes','notes']] },
   certificates: { table:'certificates', select:'number,compliant,issued_at,jobs!inner(properties!inner(address_line,suburb))', search:'number', order:'issued_at', asc:false,
     cols:[['Number','number'],['Issued','issued_at',date],['Address','jobs.properties.address_line'],['Suburb','jobs.properties.suburb'],['Result','compliant',v => v ? '<span class=good>Compliant</span>' : '<span class=bad>Not compliant</span>', 'html']] },
   invoices: { table:'invoices', select:'number,amount_ex_gst,gst,status,due_date,clients(name)', search:'number', order:'due_date', asc:false,
@@ -169,7 +216,7 @@ async function start() {
   document.title = `${data[0].companies?.name || 'AlarmRun'} – Office`;
   show('app');
   loadClientPick();
-  loadList();
+  document.querySelector('aside button[data-tab="schedule"]').click();
 }
 
 async function loadList() {
@@ -258,6 +305,96 @@ document.querySelectorAll('.propSearch').forEach(inp => inp.addEventListener('in
   $('#propList').innerHTML = (data||[]).map(p => { const label = `${p.address_line}, ${p.suburb}`; propMatches[label] = p.id; return `<option value="${esc(label)}">`; }).join('');
 }));
 
+// ---------- Scheduling ----------
+const iso = d => d.toISOString().slice(0,10);
+const addDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };
+let inspectors = [];
+
+async function openSchedule() {
+  const f = $('#dueFilter');
+  if (!f.by.value) f.by.value = addDays(30);
+  if (!$('#bookForm').day.value) $('#bookForm').day.value = addDays(1);
+  if (!$('#boardDay').value) $('#boardDay').value = addDays(1);
+  const { data } = await sb.from('inspectors').select('id,name,daily_capacity').eq('active', true).order('name');
+  inspectors = data || [];
+  document.querySelectorAll('.inspPick').forEach(s => s.innerHTML = '<option value="">— inspector —</option>' +
+    inspectors.map(i => `<option value="${i.id}">${esc(i.name)} (${i.daily_capacity}/day)</option>`).join(''));
+  loadDue(); loadBoard();
+}
+
+async function loadDue() {
+  const f = $('#dueFilter');
+  let q = sb.from('property_due').select('id,address_line,suburb,postcode,agency,last_done,due_date', { count: 'exact' })
+    .lte('due_date', f.by.value).eq('has_open_job', false)
+    .order('postcode', { nullsFirst: false }).order('suburb').order('due_date').limit(500);
+  const a = f.area.value.trim();
+  if (a) q = /^\d+$/.test(a) ? q.eq('postcode', a) : q.ilike('suburb', `%${a}%`);
+  const { data, count, error } = await q;
+  if (error) return msg(error.message);
+  const today = iso(new Date());
+  $('#dueInfo').textContent = `${count} due${count > 500 ? ' (showing first 500)' : ''}`;
+  $('#dueList').innerHTML = '<tr><th><input type="checkbox" id="allDue"></th><th>Address</th><th>Suburb</th><th>Postcode</th><th>Agency</th><th>Last done</th><th>Due</th></tr>' +
+    data.map(r => `<tr><td><input type="checkbox" class="pick" value="${r.id}"></td><td>${esc(r.address_line)}</td><td>${esc(r.suburb)}</td><td>${esc(r.postcode)}</td>
+      <td>${esc(r.agency)}</td><td>${date(r.last_done)}</td><td class="${r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td></tr>`).join('');
+  $('#allDue').onchange = e => document.querySelectorAll('.pick').forEach(c => c.checked = e.target.checked);
+  $('#dueList').onchange = updateBookInfo;
+  updateBookInfo();
+}
+
+async function dayCount(inspectorId, day) {
+  const { count } = await sb.from('jobs').select('id', { count: 'exact', head: true })
+    .eq('inspector_id', inspectorId).gte('scheduled_start', day + 'T00:00').lte('scheduled_start', day + 'T23:59')
+    .neq('status', 'cancelled');
+  return count || 0;
+}
+
+async function updateBookInfo() {
+  const f = $('#bookForm'), n = document.querySelectorAll('.pick:checked').length;
+  const ins = inspectors.find(i => i.id === f.inspector.value);
+  if (!ins || !f.day.value) return $('#bookInfo').textContent = `${n} selected`;
+  const have = await dayCount(ins.id, f.day.value), total = have + n;
+  $('#bookInfo').innerHTML = `${n} selected · ${esc(ins.name)} on ${f.day.value}: ${total}/${ins.daily_capacity}` +
+    (total > ins.daily_capacity ? ' <span class=bad>over capacity</span>' : '');
+}
+$('#bookForm').inspector.onchange = updateBookInfo;
+$('#bookForm').day.onchange = updateBookInfo;
+
+$('#dueFilter').onsubmit = e => { e.preventDefault(); loadDue(); };
+$('#bookForm').onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target, ids = [...document.querySelectorAll('.pick:checked')].map(c => c.value);
+  if (!ids.length) return msg('Tick some properties first');
+  const rows = ids.map((pid, i) => ({ company_id: companyId, property_id: pid, job_type: 'annual', status: 'booked',
+    inspector_id: f.inspector.value, scheduled_start: `${f.day.value}T09:00:00`, route_order: i + 1 }));
+  const { error } = await sb.from('jobs').insert(rows);
+  if (error) return msg(error.message);
+  msg(''); $('#boardDay').value = f.day.value; loadDue(); loadBoard();
+};
+
+async function loadBoard() {
+  const day = $('#boardDay').value;
+  const { data, error } = await sb.from('jobs').select('id,status,inspector_id,route_order,properties(address_line,suburb)')
+    .gte('scheduled_start', day + 'T00:00').lte('scheduled_start', day + 'T23:59').neq('status', 'cancelled')
+    .order('route_order');
+  if (error) return msg(error.message);
+  const cols = [...inspectors, { id: null, name: 'Unassigned', daily_capacity: '' }];
+  $('#board').innerHTML = cols.map(i => {
+    const js = data.filter(j => j.inspector_id === i.id);
+    if (!i.id && !js.length) return '';
+    const over = i.daily_capacity && js.length > i.daily_capacity;
+    return `<div><b>${esc(i.name)}</b> <span class="${over ? 'bad' : ''}">${js.length}${i.daily_capacity ? '/' + i.daily_capacity : ''}</span>
+      <ol>${js.map(j => `<li>${esc(j.properties?.address_line)}, ${esc(j.properties?.suburb)} <small>(${j.status})</small>
+        <button data-unbook="${j.id}" title="Cancel">✕</button></li>`).join('')}</ol></div>`;
+  }).join('');
+}
+$('#boardDay').onchange = loadBoard;
+$('#board').onclick = async e => {
+  const id = e.target.dataset.unbook; if (!id) return;
+  const { error } = await sb.from('jobs').update({ status: 'cancelled' }).eq('id', id);
+  if (error) return msg(error.message);
+  loadBoard(); loadDue();
+};
+
 // Events
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -300,9 +437,12 @@ $('#search').addEventListener('input', e => { clearTimeout(timer); timer = setTi
 $('#prev').onclick = () => { page--; loadList(); };
 $('#next').onclick = () => { page++; loadList(); };
 $('#back').onclick = () => { $('#detail').classList.add('hidden'); $('#listArea').classList.remove('hidden'); document.querySelectorAll('.tab form').forEach(f => f.classList.remove('hidden')); loadList(); };
-document.querySelectorAll('nav button[data-tab]').forEach(b => b.onclick = () => {
+document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () => {
   tab = b.dataset.tab; page = 0; term = ''; $('#search').value = '';
+  document.querySelectorAll('aside button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('hidden', t.id !== 'tab-' + tab));
+  $('#detail').classList.add('hidden');
+  if (tab === 'schedule') { $('#listArea').classList.add('hidden'); return openSchedule(); }
   $('#back').onclick();
 });
 $('#logout').onclick = async () => { await sb.auth.signOut(); show('login'); };
