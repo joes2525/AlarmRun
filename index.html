@@ -110,8 +110,9 @@ async function start() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return show('login');
   $('#who').textContent = session.user.email;
-  const { data } = await sb.from('memberships').select('company_id').limit(1);
-  if (!data || !data.length) return show('setup');
+  const { data, error } = await sb.from('memberships').select('company_id').limit(1);
+  if (error) { msg(error.message); return show('setup'); }
+  if (!data.length) return show('setup');
   companyId = data[0].company_id;
   show('app');
   loadAll();
