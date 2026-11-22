@@ -166,10 +166,11 @@
     </form>
     <div style="max-height:45vh;overflow:auto"><table id="readyList" class="grp"></table></div>
     <p style="margin:0;color:#555">Tick what to book, click an inspector's day on the week board, then click <b>Book</b>.</p>
-    <h3><span id="readyHead">Ready to book</span> <button type="button" id="doBook" class="primary">Book</button> <span id="bookPick" style="font-size:14px;font-weight:normal"></span> <button type="button" id="backToDue">Send ticked back to Due</button></h3>
+    <h3><span id="readyHead">Ready to book</span> <button type="button" id="doBook" class="primary">Book</button> <button type="button" id="openDay">Open day</button> <button type="button" id="backToDue">Send ticked back to Due</button></h3>
     <h3>Week board <small style="font-weight:normal;color:#555">(click a day to select it)</small></h3>
     <div class="bar"><button type="button" id="wkPrev">◀</button><b id="wkLabel"></b><button type="button" id="wkNext">▶</button></div>
     <table id="week" class="week"></table>
+    <div id="dayView"></div>
   </div>
 
   <!-- shared list area -->
@@ -458,11 +459,11 @@ async function updateBookInfo() {
   document.querySelectorAll('#week td.sel').forEach(td => td.classList.remove('sel'));
   document.querySelector(`#week td[data-ins="${f.inspector.value}"][data-day="${f.day.value}"]`)?.classList.add('sel');
   const nice = f.day.value ? new Date(f.day.value + 'T00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
-  if (!ins || !f.day.value) { $('#bookPick').textContent = 'Pick a day on the week board'; return; }
+  if (!ins || !f.day.value) { return; }
   const total = (await dayCount(ins.id, f.day.value)) + n;
   const ag = {}; for (const k of ticked.ready) { const a = readyRows.get(k)?.agency || 'No agent'; ag[a] = (ag[a] || 0) + 1; }
   const agents = Object.entries(ag).map(([a, c]) => `${esc(a)} ${c}`).join(', ');
-  $('#bookPick').innerHTML = `${n} (${agents}) → ${esc(ins.name)}, ${nice} (${total}/${ins.daily_capacity})` +
+  $('#bookInfo').innerHTML = `${n} (${agents}) → ${esc(ins.name)}, ${nice} (${total}/${ins.daily_capacity})` +
     (total > ins.daily_capacity ? ' <span class=bad>over capacity</span>' : '');
 }
 $('#bookForm').inspector.onchange = updateBookInfo;
@@ -528,6 +529,36 @@ $('#doBook').onclick = async () => {
   const total = (await dayCount(ins.id, f.day.value)) + ticked.ready.size;
   if (total > ins.daily_capacity && !confirm(`That makes ${total}/${ins.daily_capacity} for ${ins.name} – over capacity. Book anyway?`)) return;
   f.requestSubmit();
+};
+// Open day: the selected inspector's jobs for that day
+async function openDay() {
+  const f = $('#bookForm'), ins = inspectors.find(i => i.id === f.inspector.value);
+  if (!ins || !f.day.value) return msg('Click an inspector\'s day on the week board first');
+  const day = f.day.value;
+  const { data, error } = await sb.from('jobs').select('id,job_type,status,route_order,notes,properties(address_line,suburb,clients(name))')
+    .eq('inspector_id', ins.id).gte('scheduled_start', day + 'T00:00').lte('scheduled_start', day + 'T23:59')
+    .neq('status', 'cancelled').order('route_order');
+  if (error) return msg(error.message);
+  const nice = new Date(day + 'T00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' });
+  const label = { callout: 'Breakdown', annual: 'Annual', pre_tenancy: 'Lease' };
+  $('#dayView').innerHTML = `<h3>${esc(ins.name)} – ${nice} (${data.length}/${ins.daily_capacity})</h3>
+    <table class="grp"><tr><th>#</th><th>Address</th><th>Agent</th><th>Area</th><th>Reason</th><th>Status</th><th></th><th>Notes</th></tr>` +
+    data.map((j, i) => `<tr><td>${i + 1}</td><td>${esc(j.properties?.address_line)}, ${esc(j.properties?.suburb)}</td>
+      <td>${esc(j.properties?.clients?.name)}</td><td>${esc(areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || '')}</td>
+      <td>${label[j.job_type] || esc(j.job_type)}</td><td>${esc(j.status)}</td>
+      <td>${j.status === 'booked' ? `<button data-unbook="${j.id}" data-type="${j.job_type}">Unbook</button>` : ''}</td><td>${esc(j.notes)}</td></tr>`).join('') + '</table>';
+  $('#dayView').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+$('#openDay').onclick = openDay;
+$('#dayView').onclick = async e => {
+  const id = e.target.dataset.unbook; if (!id) return;
+  // breakdowns go back to Due as a logged breakdown; annual bookings are cancelled so the property is due again
+  const change = e.target.dataset.type === 'callout'
+    ? { status: 'to_book', inspector_id: null, scheduled_start: null, route_order: null }
+    : { status: 'cancelled' };
+  const { error } = await sb.from('jobs').update(change).eq('id', id);
+  if (error) return msg(error.message);
+  openDay(); loadWeek();
 };
 const shiftWeek = n => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + n); weekStart = iso(d); loadWeek(); };
 $('#wkPrev').onclick = () => shiftWeek(-7);
