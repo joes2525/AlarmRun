@@ -449,7 +449,7 @@ $('#backToDue').onclick = () => {
 async function dayCount(inspectorId, day) {
   const { count } = await sb.from('jobs').select('id', { count: 'exact', head: true })
     .eq('inspector_id', inspectorId).gte('scheduled_start', day + 'T00:00').lte('scheduled_start', day + 'T23:59')
-    .neq('status', 'cancelled');
+    .in('status', ['booked', 'in_progress']);
   return count || 0;
 }
 
@@ -494,7 +494,7 @@ async function loadWeek() {
   const days = [...Array(7)].map((_, i) => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + i); return iso(d); });
   $('#wkLabel').textContent = ` Week of ${weekStart} `;
   const { data, error } = await sb.from('jobs').select('inspector_id,scheduled_start,properties(suburb)')
-    .gte('scheduled_start', days[0] + 'T00:00').lte('scheduled_start', days[6] + 'T23:59').neq('status', 'cancelled');
+    .gte('scheduled_start', days[0] + 'T00:00').lte('scheduled_start', days[6] + 'T23:59').in('status', ['booked', 'in_progress']);
   if (error) return msg(error.message);
   const cell = {};   // ins|day → {total, areas:{}}
   for (const j of data) {
@@ -537,7 +537,7 @@ async function openDay() {
   const day = f.day.value;
   const { data, error } = await sb.from('jobs').select('id,job_type,status,route_order,notes,properties(address_line,suburb,clients(name))')
     .eq('inspector_id', ins.id).gte('scheduled_start', day + 'T00:00').lte('scheduled_start', day + 'T23:59')
-    .neq('status', 'cancelled').order('route_order');
+    .in('status', ['booked', 'in_progress']).order('route_order');
   if (error) return msg(error.message);
   const nice = new Date(day + 'T00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' });
   const label = { callout: 'Breakdown', annual: 'Annual', pre_tenancy: 'Lease' };
