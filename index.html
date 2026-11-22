@@ -157,16 +157,15 @@
 
   <div id="tab-book" class="tab hidden">
     <h2>Book</h2>
-    <form id="bookForm">
-      <select name="inspector" class="inspPick" required></select>
-      <input type="date" name="day" required>
-      <button class="primary">Book ticked</button>
-      <button type="button" id="backToDue">Send ticked back to Due</button>
+    <form id="bookForm" hidden>
+      <select name="inspector" class="inspPick"></select>
+      <input type="date" name="day">
       <span id="bookInfo"></span>
     </form>
-    <h3 id="readyHead">Ready to book</h3>
+    <p style="margin:0;color:#555">Tick what to book, then click an inspector's day on the week board.</p>
+    <h3><span id="readyHead">Ready to book</span> <button type="button" id="backToDue">Send ticked back to Due</button></h3>
     <div style="max-height:45vh;overflow:auto"><table id="readyList" class="grp"></table></div>
-    <h3>Week board <small style="font-weight:normal;color:#555">(click a cell to book into it)</small></h3>
+    <h3>Week board <small style="font-weight:normal;color:#555">(click a day to book the ticked ones into it)</small></h3>
     <div class="bar"><button type="button" id="wkPrev">◀</button><b id="wkLabel"></b><button type="button" id="wkNext">▶</button></div>
     <table id="week" class="week"></table>
   </div>
@@ -512,9 +511,16 @@ async function loadWeek() {
     }).join('');
   updateBookInfo();
 }
-$('#week').onclick = e => {
-  const td = e.target.closest('td[data-day]'); if (!td || td.dataset.ins === 'none') return;
-  $('#bookForm').inspector.value = td.dataset.ins; $('#bookForm').day.value = td.dataset.day; updateBookInfo();
+$('#week').onclick = async e => {
+  const td = e.target.closest('td[data-day]'); if (!td) return;
+  if (!ticked.ready.size) return msg('Tick some on the Ready to book list first');
+  const ins = inspectors.find(i => i.id === td.dataset.ins), day = td.dataset.day;
+  const total = (await dayCount(ins.id, day)) + ticked.ready.size;
+  const nice = new Date(day + 'T00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+  if (!confirm(`Book ${ticked.ready.size} into ${ins.name} on ${nice}?\nThat makes ${total}/${ins.daily_capacity}` +
+    (total > ins.daily_capacity ? ' – OVER CAPACITY' : ''))) return;
+  $('#bookForm').inspector.value = ins.id; $('#bookForm').day.value = day;
+  $('#bookForm').requestSubmit();
 };
 const shiftWeek = n => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + n); weekStart = iso(d); loadWeek(); };
 $('#wkPrev').onclick = () => shiftWeek(-7);
