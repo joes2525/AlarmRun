@@ -143,7 +143,7 @@ $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
   const f = new FormData(e.target), act = e.submitter.value;
   const creds = { email: f.get('email'), password: f.get('password') };
-  const { error } = act === 'up' ? await sb.auth.signUp(creds) : await sb.auth.signInWithPassword(creds);
+  const { error } = act === 'up' ? await sb.auth.signUp({ ...creds, options: { emailRedirectTo: location.origin + location.pathname } }) : await sb.auth.signInWithPassword(creds);
   if (error) return msg(error.message);
   msg(act === 'up' ? 'Check your email to confirm, then sign in.' : '');
   start();
