@@ -47,6 +47,7 @@
     <span id="who"></span> |
     <button data-tab="clients">Clients</button>
     <button data-tab="properties">Properties</button>
+    <button data-tab="tenants">Tenants</button>
     <button data-tab="jobs">Jobs</button>
     <button data-tab="certificates">Certificates</button>
     <button data-tab="invoices">Invoices</button>
@@ -76,6 +77,21 @@
       <input name="tenant_phone" placeholder="Tenant phone">
       <input name="next_due" type="date" title="Next check due">
       <button>Add property</button>
+    </form>
+  </div>
+
+  <div id="tab-tenants" class="tab hidden">
+    <h2>Tenants</h2>
+    <form data-table="tenancies">
+      <input class="propSearch" list="propList" placeholder="Type address…" required>
+      <input type="hidden" name="property_id">
+      <input name="tenant_names" placeholder="Tenant name(s)" required>
+      <input name="mobile" placeholder="Mobile">
+      <input name="email" type="email" placeholder="Email">
+      <label>Lease start <input name="lease_start" type="date"></label>
+      <label>Lease end <input name="lease_end" type="date"></label>
+      <label>Vacate <input name="vacate_date" type="date"></label>
+      <button>Add tenancy</button>
     </form>
   </div>
 
@@ -121,6 +137,8 @@ const msg = t => $('#msg').textContent = t || '';
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const get = (r, p) => p.split('.').reduce((o, k) => o && o[k], r);
 const date = v => v ? String(v).slice(0,10) : '';
+const leaseEnd = v => { if (!v) return ''; const days = Math.round((new Date(v) - new Date()) / 864e5);
+  return esc(date(v)) + (days < 0 ? ' <span class=bad>(ended)</span>' : days <= 60 ? ` <span class=bad>(${days} days)</span>` : ''); };
 const money = v => v == null ? '' : '$' + Number(v).toFixed(2);
 
 // What each tab lists, what it searches, how it sorts
@@ -129,6 +147,8 @@ const views = {
     cols:[['Name','name'],['Type','type'],['Billing email','billing_email'],['Phone','phone']] },
   properties: { table:'properties', select:'id,address_line,suburb,postcode,next_due,tenant_name,clients(name)', search:'address_line', order:'address_line', asc:true, click:true,
     cols:[['Address','address_line'],['Suburb','suburb'],['Agency','clients.name'],['Tenant','tenant_name'],['Next due','next_due',date]] },
+  tenants: { table:'tenancies', select:'id,tenant_names,mobile,email,lease_start,lease_end,vacate_date,property_id,properties!inner(address_line,suburb)', search:'tenant_names', order:'lease_end', asc:false, click:'property_id',
+    cols:[['Address','properties.address_line'],['Suburb','properties.suburb'],['Tenants','tenant_names'],['Mobile','mobile'],['Email','email'],['Lease start','lease_start',date],['Lease end','lease_end',leaseEnd,'html'],['Vacate','vacate_date',date]] },
   jobs: { table:'jobs', select:'id,job_type,status,scheduled_start,notes,locked,properties!inner(address_line,suburb)', search:'properties.address_line', order:'scheduled_start', asc:false,
     cols:[['Date','scheduled_start',date],['Address','properties.address_line'],['Suburb','properties.suburb'],['Type','job_type'],['Status','status',null,'status'],['Notes','notes']] },
   certificates: { table:'certificates', select:'number,compliant,issued_at,jobs!inner(properties!inner(address_line,suburb))', search:'number', order:'issued_at', asc:false,
@@ -165,7 +185,7 @@ async function loadList() {
   $('#pageInfo').textContent = ` Page ${page + 1} of ${pages} (${count} records) `;
   $('#prev').disabled = page === 0; $('#next').disabled = page + 1 >= pages;
   $('#list').innerHTML = '<tr>' + v.cols.map(c => `<th>${c[0]}</th>`).join('') + '</tr>' +
-    data.map(r => `<tr${v.click ? ` class="click" data-id="${r.id}"` : ''}>` + v.cols.map(([, path, fmt, kind]) => {
+    data.map(r => `<tr${v.click ? ` class="click" data-id="${v.click === true ? r.id : r[v.click]}"` : ''}>` + v.cols.map(([, path, fmt, kind]) => {
       const val = get(r, path);
       if (kind === 'status' && !r.locked)
         return `<td><select data-job="${r.id}">${['to_book','booked','in_progress','completed','cancelled','no_access'].map(s => `<option${s===val?' selected':''}>${s}</option>`).join('')}</select></td>`;
@@ -178,10 +198,11 @@ async function loadList() {
 async function openProperty(id) {
   $('#listArea').classList.add('hidden'); $('#detail').classList.remove('hidden');
   document.querySelectorAll('.tab form').forEach(f => f.classList.add('hidden'));
-  const [{ data: p }, { data: alarms }, { data: jobs }] = await Promise.all([
+  const [{ data: p }, { data: alarms }, { data: jobs }, { data: ten }] = await Promise.all([
     sb.from('properties').select('*,clients(name)').eq('id', id).single(),
     sb.from('alarms').select('*').eq('property_id', id).order('location'),
     sb.from('jobs').select('job_type,status,scheduled_start,notes,certificates(number,compliant)').eq('property_id', id).order('scheduled_start', { ascending: false }),
+    sb.from('tenancies').select('*').eq('property_id', id).order('lease_start', { ascending: false, nullsFirst: false }),
   ]);
   const today = new Date().toISOString().slice(0,10);
   $('#detailBody').innerHTML = `
@@ -190,6 +211,10 @@ async function openProperty(id) {
     <b>Tenant:</b> ${esc(p.tenant_name)} ${esc(p.tenant_phone)} ${esc(p.tenant_email)}<br>
     <b>Lease:</b> ${date(p.lease_start)} → ${date(p.lease_end)}<br>
     <b>Notes:</b> ${esc(p.access_notes)}</p>
+    <h3>Tenancies (${ten.length})</h3>
+    <table><tr><th>Tenants</th><th>Mobile</th><th>Email</th><th>Move in</th><th>Lease</th><th>Vacate</th><th>PM</th></tr>
+    ${ten.map(t => `<tr><td>${esc(t.tenant_names)}</td><td>${esc(t.mobile)}</td><td>${esc(t.email)}</td><td>${date(t.move_in)}</td>
+      <td>${date(t.lease_start)} → ${leaseEnd(t.lease_end)}</td><td>${date(t.vacate_date)}</td><td>${esc(t.property_manager)}</td></tr>`).join('')}</table>
     <h3>Alarms (${alarms.length})</h3>
     <table><tr><th>Location</th><th>Type</th><th>Power</th><th>Brand</th><th>Expires</th></tr>
     ${alarms.map(a => `<tr><td>${esc(a.location)}</td><td>${esc(a.sensor_type)}</td><td>${esc(a.power_source)}</td><td>${esc(a.brand)}</td>
@@ -224,14 +249,14 @@ async function loadClientPick() {
 
 // Address search for the job form
 let propMatches = {};
-document.querySelector('.propSearch').addEventListener('input', async e => {
+document.querySelectorAll('.propSearch').forEach(inp => inp.addEventListener('input', async e => {
   const t = e.target.value, hidden = e.target.form.property_id;
   hidden.value = propMatches[t] || '';
   if (t.length < 3 || propMatches[t]) return;
   const { data } = await sb.from('properties').select('id,address_line,suburb').ilike('address_line', `%${t}%`).limit(20);
   propMatches = {};
   $('#propList').innerHTML = (data||[]).map(p => { const label = `${p.address_line}, ${p.suburb}`; propMatches[label] = p.id; return `<option value="${esc(label)}">`; }).join('');
-});
+}));
 
 // Events
 $('#loginForm').addEventListener('submit', async e => {
@@ -258,7 +283,7 @@ document.querySelectorAll('form[data-table]').forEach(form => form.addEventListe
   e.preventDefault();
   const row = { company_id: companyId };
   for (const [k, v] of new FormData(form)) if (v !== '') row[k] = v;
-  if (form.dataset.table === 'jobs' && !row.property_id) return msg('Pick an address from the list');
+  if (form.querySelector('.propSearch') && !row.property_id) return msg('Pick an address from the list');
   const { error } = await sb.from(form.dataset.table).insert(row);
   if (error) return msg(error.message);
   msg(''); form.reset(); loadList(); if (form.dataset.table === 'clients') loadClientPick();
