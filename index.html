@@ -14,7 +14,12 @@
   main{flex:1;padding:16px;min-width:0}
   #login,#setup,body>h1,#msg{margin:16px}
   table.grp{width:100%}
-  table.grp tr:not([class]) td:not(:last-child){white-space:nowrap;width:1%}
+  table.grp tr:not([class]) td:not(:last-child),table.grp tr.prow td:not(:last-child){white-space:nowrap;width:1%}
+  .halves{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+  .halves>div{max-height:50vh;overflow:auto}
+  table.heads tr.prow,table.heads tr:first-child{display:none}
+  table.heads td[data-focus]{cursor:pointer} table.heads td[data-focus]:hover{text-decoration:underline}
+  table.heads tr.focus td{outline:2px solid #1f6feb}
   .g0 td{background:#1f2933;color:#fff;font-weight:bold}.g1 td{background:#dde3ea;font-weight:bold}.g2 td{background:#eef1f4;font-weight:600}
   button.primary{background:#1f6feb;color:#fff;border:0;padding:6px 12px;border-radius:5px}
   table.week td{min-width:120px;font-size:13px;cursor:pointer}
@@ -164,7 +169,10 @@
       <input type="date" name="day">
       <span id="bookInfo"></span>
     </form>
-    <div style="max-height:45vh;overflow:auto"><table id="readyList" class="grp"></table></div>
+    <div class="halves">
+      <div><table id="readyList" class="grp heads"></table></div>
+      <div><div id="propsHead" style="font-weight:bold;padding:4px 0">Click an agent or area to see its properties</div><table id="readyProps" class="grp"></table></div>
+    </div>
     <p style="margin:0;color:#555">Tick what to book, click an inspector's day on the week board, then click <b>Book</b>.</p>
     <h3><span id="readyHead">Ready to book</span> <button type="button" id="doBook" class="primary">Book</button> <button type="button" id="unbookDay">Unbook day</button> <button type="button" id="backToDue">Send ticked back to Due</button></h3>
     <h3>Week board <small style="font-weight:normal;color:#555">(click a day to select it)</small></h3>
@@ -366,7 +374,7 @@ function renderGrouped(rows, el, which, groupBy) {
   const order = (o, key) => key === 'reason'
     ? ['Breakdown', 'Annual'].filter(x => o[x]).concat(Object.keys(o).filter(x => !['Breakdown', 'Annual'].includes(x)))
     : Object.keys(o).sort((x, y) => n(o[y]) - n(o[x]));
-  const head = (cls, id, label, pad) => `<tr class="${cls}"><td><input type="checkbox" data-group="${id}"></td><td colspan="4">${pad}${label}</td></tr>`;
+  const head = (cls, id, label, pad) => `<tr class="${cls}"><td><input type="checkbox" data-group="${id}"></td><td colspan="4" data-focus="${id}" data-label="${label}">${pad}${label}</td></tr>`;
   let html = '<tr><th></th><th>Address</th><th>Last done</th><th>Due</th><th>Notes</th></tr>', gi = 0;
   for (const a0 of order(tree, k0)) {
     const id0 = which + (gi++); html += head('g0', id0, `${esc(a0)} — ${n(tree[a0])}`, '');
@@ -376,7 +384,7 @@ function renderGrouped(rows, el, which, groupBy) {
         const id2 = which + (gi++), list = tree[a0][a1][a2]
           .sort((x, y) => (x.suburb || '').localeCompare(y.suburb || '') || x.address_line.localeCompare(y.address_line));
         html += head('g2', id2, `${esc(a2)} — ${list.length}`, '&nbsp;&nbsp;&nbsp;&nbsp;');
-        html += list.map(r => `<tr><td><input type="checkbox" class="pick ${id0} ${id1} ${id2}" data-key="${keyOf(r)}"${ticked[which].has(keyOf(r)) ? ' checked' : ''}></td>
+        html += list.map(r => `<tr class="prow"><td><input type="checkbox" class="pick ${id0} ${id1} ${id2}" data-key="${keyOf(r)}"${ticked[which].has(keyOf(r)) ? ' checked' : ''}></td>
           <td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td>${date(r.last_done)}</td>
           <td class="${r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td><td>${esc(r.notes)}</td></tr>`).join('');
       }
@@ -387,10 +395,36 @@ function renderGrouped(rows, el, which, groupBy) {
     const g = e.target.dataset.group;
     const boxes = g ? [...el.querySelectorAll('.pick.' + g)] : e.target.classList.contains('pick') ? [e.target] : [];
     boxes.forEach(c => { c.checked = e.target.checked; c.checked ? ticked[which].add(c.dataset.key) : ticked[which].delete(c.dataset.key); });
-    counts();
+    counts(); if (which === 'ready') showProps();
   };
+  if (which === 'ready') {
+    el.onclick = e => { const id = e.target.closest('[data-focus]')?.dataset.focus; if (id) { focusGroup = id; showProps(); } };
+    showProps();
+  }
   counts();
 }
+
+// Right half of Book: the properties in the agent/area you clicked
+let focusGroup = null;
+function showProps() {
+  const left = $('#readyList'), head = left.querySelector(`[data-focus="${focusGroup}"]`);
+  left.querySelectorAll('tr.focus').forEach(tr => tr.classList.remove('focus'));
+  if (!head) { $('#readyProps').innerHTML = ''; $('#propsHead').textContent = 'Click an agent or area to see its properties'; return; }
+  head.parentElement.classList.add('focus');
+  const today = iso(new Date());
+  const rows = [...left.querySelectorAll('.pick.' + focusGroup)].map(c => readyRows.get(c.dataset.key)).filter(Boolean);
+  $('#propsHead').textContent = head.dataset.label;
+  $('#readyProps').innerHTML = '<tr><th></th><th>Address</th><th>Last done</th><th>Due</th><th>Notes</th></tr>' + rows.map(r =>
+    `<tr class="prow"><td><input type="checkbox" data-key="${keyOf(r)}"${ticked.ready.has(keyOf(r)) ? ' checked' : ''}></td>
+     <td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td>${date(r.last_done)}</td>
+     <td class="${r.due_date && r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td><td>${esc(r.notes)}</td></tr>`).join('');
+}
+$('#readyProps').onchange = e => {
+  const k = e.target.dataset.key; if (!k) return;
+  e.target.checked ? ticked.ready.add(k) : ticked.ready.delete(k);
+  const twin = $('#readyList').querySelector(`.pick[data-key="${k}"]`); if (twin) twin.checked = e.target.checked;
+  counts();
+};
 
 function counts() {
   $('#dueCount').textContent = `${ticked.due.size} ticked`;
