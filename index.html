@@ -72,6 +72,7 @@
     <b>AlarmRun</b><div class="who" id="who"></div>
     <button data-tab="due">Due</button>
     <button data-tab="book">Book</button>
+    <button data-tab="scheduled">Scheduled</button>
     <button data-tab="clients">Clients</button>
     <button data-tab="properties">Properties</button>
     <button data-tab="tenants">Tenants</button>
@@ -176,6 +177,21 @@
     </div>
     <p style="margin:0;color:#555">Tick what to book, click an inspector's day on the week board, then click <b>Book</b>.</p>
     <h3><span id="readyHead">Ready to book</span> <button type="button" id="doBook" class="primary">Book</button> <button type="button" id="unbookDay">Unbook day</button> <button type="button" id="backToDue">Send ticked back to Due</button></h3>
+  </div>
+
+  <div id="tab-scheduled" class="tab hidden">
+    <h2>Scheduled</h2>
+    <p style="margin:0;color:#555">Click a day on the week board, tick jobs in the day list, then choose an action.</p>
+    <div class="bar" style="flex-wrap:wrap">
+      <b id="schedTicked">0 ticked</b>
+      <span>Move to <select id="mvIns" class="inspPick"></select> <input type="date" id="mvDay"> <button type="button" id="doMove" class="primary">Move</button></span>
+      <span>Change inspector <select id="chIns" class="inspPick"></select> <button type="button" id="doChange">Change</button></span>
+      <button type="button" id="doUnbook">Unbook</button>
+      <button type="button" id="doCancel">Cancel jobs</button>
+    </div>
+  </div>
+
+  <div id="weekArea" class="hidden">
     <h3>Week board <small style="font-weight:normal;color:#555">(click a day to select it)</small></h3>
     <div class="bar"><button type="button" id="wkPrev">◀</button><b id="wkLabel"></b><button type="button" id="wkNext">▶</button>
       <button type="button" data-wk="0">This week</button><button type="button" data-wk="7">Next week</button><button type="button" data-wk="14">The week after that</button></div>
@@ -365,7 +381,7 @@ async function openSchedule() {
     document.querySelectorAll('.inspPick').forEach(s => s.innerHTML = '<option value="">— inspector —</option>' +
       inspectors.map(i => `<option value="${i.id}">${esc(i.name)} (${i.daily_capacity}/day)</option>`).join(''));
   }
-  if (tab === 'due') loadDue(); else { renderReady(); loadWeek(); }
+  if (tab === 'due') loadDue(); else { if (tab === 'book') renderReady(); dayTicked.clear(); loadWeek(); }
 }
 
 // Grouped table used by both Due and Ready to book
@@ -572,7 +588,7 @@ function drawWeek() {
 $('#week').onclick = e => {
   const td = e.target.closest('td[data-day]'); if (!td) return;
   $('#bookForm').inspector.value = td.dataset.ins; $('#bookForm').day.value = td.dataset.day;
-  drawWeek(); openDay();
+  dayTicked.clear(); showTicked(); drawWeek(); openDay();
 };
 $('#doBook').onclick = async () => {
   const f = $('#bookForm'), ins = inspectors.find(i => i.id === f.inspector.value);
@@ -594,13 +610,44 @@ async function openDay() {
   const nice = new Date(day + 'T00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' });
   const label = { callout: 'Breakdown', annual: 'Annual', pre_tenancy: 'Lease' };
   $('#dayView').innerHTML = `<h3>${esc(ins.name)} – ${nice} (${data.length}/${ins.daily_capacity})</h3>
-    <div class="dayBox"><table class="grp"><tr><th>#</th><th>Address</th><th>Agent</th><th>Area</th><th>Reason</th><th>Status</th><th></th><th>Notes</th></tr>` +
-    data.map((j, i) => `<tr><td>${i + 1}</td><td>${esc(j.properties?.address_line)}, ${esc(j.properties?.suburb)}</td>
+    <div class="dayBox"><table class="grp"><tr><th>${tab === 'scheduled' ? '<input type="checkbox" id="dayAll">' : '#'}</th><th>Address</th><th>Agent</th><th>Area</th><th>Reason</th><th>Status</th><th></th><th>Notes</th></tr>` +
+    data.map((j, i) => `<tr><td>${tab === 'scheduled' ? `<input type="checkbox" class="dpick" value="${j.id}"${dayTicked.has(j.id) ? ' checked' : ''}>` : i + 1}</td><td>${esc(j.properties?.address_line)}, ${esc(j.properties?.suburb)}</td>
       <td>${esc(j.properties?.clients?.name)}</td><td>${esc(areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || '')}</td>
       <td>${label[j.job_type] || esc(j.job_type)}</td><td>${esc(j.status)}</td>
       <td>${j.status === 'booked' ? `<button data-unbook="${j.id}" data-type="${j.job_type}">Unbook</button>` : ''}</td><td>${esc(j.notes)}</td></tr>`).join('') + '</table></div>';
 }
 // unbooked jobs keep existing but lose their inspector/day, so they land back in Ready to book
+// ---------- Scheduled page actions ----------
+const dayTicked = new Set();
+const showTicked = () => $('#schedTicked').textContent = `${dayTicked.size} ticked`;
+$('#dayView').addEventListener('change', e => {
+  if (e.target.id === 'dayAll') document.querySelectorAll('.dpick').forEach(c => { c.checked = e.target.checked; c.checked ? dayTicked.add(c.value) : dayTicked.delete(c.value); });
+  else if (e.target.classList.contains('dpick')) e.target.checked ? dayTicked.add(e.target.value) : dayTicked.delete(e.target.value);
+  showTicked();
+});
+async function actOnTicked(change, done) {
+  const ids = [...dayTicked];
+  if (!ids.length) return msg('Tick some jobs in the day list first');
+  const { error } = await sb.from('jobs').update(change).in('id', ids);
+  if (error) return msg(error.message);
+  dayTicked.clear(); showTicked(); msg(done(ids.length));
+  Promise.all([loadWeek(), renderReady()]);
+}
+$('#doMove').onclick = () => {
+  const ins = $('#mvIns').value || $('#bookForm').inspector.value, day = $('#mvDay').value;
+  if (!day) return msg('Pick the day to move to');
+  actOnTicked({ inspector_id: ins, scheduled_start: `${day}T09:00:00` }, n => `Moved ${n} to ${day}`);
+};
+$('#doChange').onclick = () => {
+  if (!$('#chIns').value) return msg('Pick the new inspector');
+  actOnTicked({ inspector_id: $('#chIns').value }, n => `Changed inspector on ${n}`);
+};
+$('#doUnbook').onclick = () => actOnTicked({ status: 'booked', inspector_id: null, scheduled_start: null, route_order: null }, n => `Unbooked ${n} – back in Ready to book`);
+$('#doCancel').onclick = () => {
+  if (!dayTicked.size || confirm(`Cancel ${dayTicked.size} jobs? Annual inspections go back to Due.`))
+    actOnTicked({ status: 'cancelled' }, n => `Cancelled ${n}`);
+};
+
 const unbook = ids => sb.from('jobs').update({ status: 'booked', inspector_id: null, scheduled_start: null, route_order: null }).in('id', [].concat(ids));
 $('#dayView').onclick = async e => {
   const id = e.target.dataset.unbook; if (!id) return;
@@ -673,7 +720,8 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   document.querySelectorAll('aside button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('hidden', t.id !== 'tab-' + tab));
   $('#detail').classList.add('hidden');
-  if (tab === 'due' || tab === 'book') { $('#listArea').classList.add('hidden'); return openSchedule(); }
+  $('#weekArea').classList.toggle('hidden', !['book', 'scheduled'].includes(tab));
+  if (['due', 'book', 'scheduled'].includes(tab)) { $('#listArea').classList.add('hidden'); return openSchedule(); }
   $('#back').onclick();
 });
 $('#logout').onclick = async () => { await sb.auth.signOut(); show('login'); };
