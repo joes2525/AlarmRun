@@ -375,7 +375,6 @@ const saveStaged = () => { try { localStorage.setItem('staged2', JSON.stringify(
 async function openSchedule() {
   const f = $('#dueFilter');
   if (!f.by.value) f.by.value = addDays(14);
-  if (!$('#bookForm').day.value) $('#bookForm').day.value = addDays(1);
   if (!weekStart) weekStart = planWeek(14);
   if (!inspectors.length) {
     const [{ data: ins }, { data: areas }] = await Promise.all([
@@ -618,7 +617,7 @@ const loadTo = () => {};
 $('#week').onclick = e => {
   const td = e.target.closest('td[data-day]'); if (!td) return;
   const f = $('#bookForm'), isFrom = f.inspector.value === td.dataset.ins && f.day.value === td.dataset.day;
-  if (tab === 'scheduled' && f.day.value && !isFrom) { to.ins = td.dataset.ins; to.day = td.dataset.day; return drawWeek(); }
+  if (tab === 'scheduled' && f.inspector.value && f.day.value && !isFrom) { to.ins = td.dataset.ins; to.day = td.dataset.day; return drawWeek(); }
   if (tab === 'scheduled' && isFrom) { f.inspector.value = ''; f.day.value = ''; }   // start over
   else { f.inspector.value = td.dataset.ins; f.day.value = td.dataset.day; }
   to.ins = to.day = null;
