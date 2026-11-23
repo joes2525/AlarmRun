@@ -45,6 +45,7 @@
     <button data-tab="certificates">Certificates</button>
     <button data-tab="invoices">Invoices</button>
     <button data-tab="inspectors">Inspectors</button>
+    <button data-tab="prices">Prices</button>
     <button data-tab="settings">Settings</button>
     <a href="tech.html" style="color:#cfd8e3;padding:8px 10px;margin-top:auto">📱 Inspector app</a>
     <button id="logout">Log out</button>
@@ -179,6 +180,13 @@
         <div id="tplPrevBody" style="white-space:pre-wrap"></div>
       </div>
     </div>
+  </div>
+
+  <div id="tab-prices" class="tab hidden">
+    <h2>Prices & lists</h2>
+    <p style="margin:0;color:#555">These lists appear in the inspector app. Prices are ex GST and are saved with each job for invoicing.</p>
+    <div class="bar"><button type="button" id="pxSave" class="primary">Save changes</button> <span id="pxInfo"></span></div>
+    <div id="pxLists" class="pxgrid"></div>
   </div>
 
   <div id="tab-settings" class="tab hidden">

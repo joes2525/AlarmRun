@@ -56,118 +56,171 @@ $('#jobs').onclick = e => { const c = e.target.closest('[data-job]'); if (c) ope
 const shiftDay = n => { const d = new Date(day + 'T00:00'); d.setDate(d.getDate() + n); day = iso(d); loadRun(); };
 $('#prevDay').onclick = () => shiftDay(-1);
 $('#nextDay').onclick = () => shiftDay(1);
-$('#back').onclick = () => loadRun();
 
 // ---------- one job ----------
-async function openJob(id) {
-  show('job'); msg(''); $('#jobBody').innerHTML = '<p class="muted">Loading…</p>';
+let lists = null;   // locations, device types, actions, quotes (from the Prices page)
+async function loadLists() {
+  if (lists) return;
+  const { data } = await sb.from('price_items').select('kind,name').eq('active', true).order('sort');
+  lists = { location: [], device_type: [], action: [], quote: [] };
+  (data || []).forEach(r => lists[r.kind]?.push(r.name));
+}
+const opts = (arr, sel, blank) => (blank ? `<option value="">${blank}</option>` : '') + arr.map(x => `<option${x === sel ? ' selected' : ''}>${esc(x)}</option>`).join('');
+const today = () => iso(new Date());
+const upload = async (file, name) => {
+  msg('Uploading photo…');
+  const path = `${companyId}/${job.id}/${name}-${Date.now()}.jpg`;
+  const { error } = await sb.storage.from('photos').upload(path, file, { contentType: file.type || 'image/jpeg' });
+  msg(error ? 'Photo upload failed: ' + error.message : '');
+  return error ? null : path;
+};
+
+async function openJob(id, push = true) {
+  if (push) history.pushState({ job: id }, '', '#job');
+  show('job'); msg(''); $('#jobBody').innerHTML = '<p class="muted">Loading…</p>'; scrollTo(0, 0);
+  await loadLists();
   const { data: j, error } = await sb.from('jobs')
-    .select('id,job_type,status,locked,notes,property_id,properties(address_line,suburb,postcode,access_notes,storeys,clients(name))').eq('id', id).single();
+    .select('id,job_type,status,locked,notes,property_id,properties(address_line,suburb,postcode,access_notes,notes,storeys,bedrooms,ceiling_access,clients(name,notes))').eq('id', id).single();
   if (error) return msg(error.message);
   const [{ data: alarms }, { data: ten }] = await Promise.all([
-    sb.from('alarms').select('id,location,storey,sensor_type,power_source,brand,expiry_date,interconnected').eq('property_id', j.property_id).eq('active', true).order('location'),
-    sb.from('tenancies').select('tenant_names,mobile,email').eq('property_id', j.property_id).order('lease_start', { ascending: false, nullsFirst: false }).limit(1)]);
-  job = { ...j, alarms: alarms || [], newAlarms: [], checks: {}, tenant: ten?.[0] || {} };
-  job.alarms.forEach(a => job.checks[a.id] = { alarm_id: a.id, tested_ok: false, cleaned: false, battery_replaced: false, replaced: false, interconnected: a.interconnected ?? true });
+    sb.from('alarms').select('id,location,sensor_type,power_source,brand,manufacture_date,expiry_date').eq('property_id', j.property_id).eq('active', true).order('location'),
+    sb.from('tenancies').select('tenant_names,mobile,email,notes').eq('property_id', j.property_id).order('lease_start', { ascending: false, nullsFirst: false }).limit(1)]);
+  const p = j.properties || {};
+  job = { ...j, tenant: ten?.[0] || {}, extra: { ceiling_access: p.ceiling_access || '', storeys: p.storeys || '', bedrooms: p.bedrooms || '' },
+    items: (alarms || []).map(a => ({ alarm_id: a.id, location: a.location, device_type: cap(a.sensor_type), manufacture_date: a.manufacture_date,
+      expiry_date: a.expiry_date, brand: a.brand, power_source: a.power_source, action: '', quote: '' })) };
   renderJob();
 }
+const cap = s => s ? s[0].toUpperCase() + s.slice(1) : '';
 
 function renderJob() {
-  const p = job.properties || {}, t = job.tenant, today = iso(new Date()), done = job.locked || job.status !== 'booked';
+  const p = job.properties || {}, t = job.tenant, done = job.locked || job.status !== 'booked', x = job.extra;
   const addr = encodeURIComponent(`${p.address_line}, ${p.suburb} QLD ${p.postcode || ''}`);
+  const notes = [['Agent', p.clients?.notes], ['Property', p.notes], ['Keys / access', p.access_notes], ['Tenant', t.notes], ['Job', job.notes]].filter(n => n[1]);
   $('#jobBody').innerHTML = `
     <div class="card">
       <h3>${esc(p.address_line)}</h3><div class="muted">${esc(p.suburb)} ${esc(p.postcode)} · ${esc(p.clients?.name)}</div>
-      ${job.notes ? `<p>${esc(job.notes)}</p>` : ''}${p.access_notes ? `<p class="muted">${esc(p.access_notes)}</p>` : ''}
       <p><b>${esc(t.tenant_names || 'No tenant on file')}</b></p>
       <div class="row">
         ${t.mobile ? `<a href="tel:${esc(t.mobile.replace(/\s/g, ''))}"><button style="width:100%">📞 Call</button></a>` : ''}
         <a href="https://www.google.com/maps/dir/?api=1&destination=${addr}" target="_blank"><button style="width:100%">🧭 Navigate</button></a>
       </div>
     </div>
+    <div class="card"><h3>Notes</h3>${notes.length ? notes.map(([k, v]) => `<p style="margin:6px 0"><b>${k}:</b> ${esc(v)}</p>`).join('') : '<p class="muted">No notes for this property.</p>'}</div>
     ${done ? `<div class="card">This job is ${esc(job.status.replace('_', ' '))}${job.locked ? ' and locked' : ''}.</div>` : `
-    <h3>Alarms (${job.alarms.length + job.newAlarms.length})</h3>
-    ${job.alarms.map(a => alarmCard(a, today)).join('')}
-    ${job.newAlarms.map((a, i) => `<div class="card"><h3>➕ ${esc(a.location)}</h3><div class="muted">New ${esc(a.sensor_type)} · ${esc(a.power_source)} · made ${esc(a.manufacture_date || '?')}</div>
-      <button class="link" data-remove-new="${i}">Remove</button></div>`).join('')}
-    <details class="card"><summary><b>➕ Add an alarm</b> (e.g. missing bedroom)</summary>
-      <input id="naLoc" placeholder="Location e.g. Bedroom 3">
-      <select id="naType"><option>photoelectric</option><option>heat</option></select>
-      <select id="naPower"><option value="10yr_lithium">10-year lithium</option><option value="hardwired">Hardwired 240V</option></select>
-      <label class="muted">Manufacture date</label><input id="naDate" type="month" value="${today.slice(0, 7)}">
-      <button id="naAdd">Add alarm</button>
-    </details>
-    <div class="card"><h3>Compliance checklist</h3>
-      ${[['bedrooms', 'An alarm in every bedroom'], ['hallways', 'An alarm in hallways connecting bedrooms'], ['storeys', 'An alarm on every storey'],
-         ['photo', 'All alarms are photoelectric'], ['inter', 'All alarms are interconnected'], ['age', 'No alarm is older than 10 years'], ['tested', 'All alarms tested and working']]
-        .map(([k, l]) => `<label class="check"><input type="checkbox" data-cl="${k}"> ${l}</label>`).join('')}
-      <textarea id="jobNotes" rows="3" placeholder="Notes for the office / agent"></textarea>
+    <h3>Alarms & devices (${job.items.length})</h3>
+    ${job.items.map(itemCard).join('')}
+    <div class="card" id="addBox">${job.adding ? addForm() : '<button class="primary" id="addOpen" style="background:#323f4b">➕ Add</button>'}</div>
+
+    <div class="card"><h3>Blind cleats</h3>
+      <div class="seg">${['All present', 'Needed', 'Not applicable'].map(v => `<button data-x="blind_cleats" data-v="${v}" class="${x.blind_cleats === v ? 'on' : ''}">${v}</button>`).join('')}</div>
+      ${x.blind_cleats === 'Needed' ? `<label class="muted">How many needed?</label><input type="number" min="1" data-xi="blind_cleats_needed" value="${esc(x.blind_cleats_needed || '')}">` : ''}
+      <h3 style="margin-top:12px">Safety switch</h3>
+      <div class="seg">${['Tested OK', 'Failed', 'No safety switch', 'Not tested'].map(v => `<button data-x="safety_switch" data-v="${v}" class="${x.safety_switch === v ? 'on' : ''}">${v}</button>`).join('')}</div>
     </div>
-    <button class="primary" id="complete">Complete inspection & issue certificate</button>
-    <div class="row"><button class="danger" id="noAccess">No access</button></div>`}`;
+
+    <div class="card"><h3>Comments</h3>
+      <textarea rows="3" data-xi="comment" placeholder="Anything the office or agent should know">${esc(x.comment || '')}</textarea>
+      <label class="photo-btn">📷 ${x.comment_photo ? 'Retake photo' : 'Add photo'}<input type="file" accept="image/*" capture="environment" data-photo="comment" hidden></label>
+      ${x.comment_photo ? '<span class="photo-ok">Photo saved ✓</span>' : ''}
+    </div>
+
+    <div class="card"><h3>Property details</h3>
+      <label class="muted">Ceiling access</label><select data-xi="ceiling_access">${opts(['Easy', 'Limited', 'None'], x.ceiling_access, '—')}</select>
+      <div class="row"><div><label class="muted">Levels</label><input type="number" min="1" data-xi="storeys" value="${esc(x.storeys)}"></div>
+        <div><label class="muted">Bedrooms</label><input type="number" min="0" data-xi="bedrooms" value="${esc(x.bedrooms)}"></div></div>
+    </div>
+
+    <div class="finish">
+      <button class="go" data-finish="compliant">✓ Compliant</button>
+      <button class="stop" data-finish="non_compliant">✗ Non-compliant</button>
+      <button class="warn" data-finish="no_access">No access</button>
+    </div>`}`;
 }
 
-function alarmCard(a, today) {
-  const c = job.checks[a.id], expired = a.expiry_date && a.expiry_date < today;
-  const tg = (k, l) => `<label><input type="checkbox" data-alarm="${a.id}" data-k="${k}"${c[k] ? ' checked' : ''}> ${l}</label>`;
+function itemCard(it, i) {
+  const expired = it.expiry_date && it.expiry_date < today();
   return `<div class="card">
-    <h3>${esc(a.location)}${a.storey > 1 ? ` <span class="tag">storey ${a.storey}</span>` : ''}</h3>
-    <div class="muted">${esc(a.sensor_type)} · ${esc(a.power_source)} · ${esc(a.brand || '')}
-      <span class="${expired ? 'bad' : ''}">expires ${esc(a.expiry_date || '?')}${expired ? ' – EXPIRED' : ''}</span></div>
-    <div class="toggles">${tg('tested_ok', 'Tested OK')}${tg('cleaned', 'Cleaned')}${tg('battery_replaced', 'Battery replaced')}${tg('replaced', 'Replaced')}${tg('interconnected', 'Interconnected')}
-      <label class="photo">📷 ${c.photo_path ? 'Retake' : 'Photo'}<input type="file" accept="image/*" capture="environment" data-photo="${a.id}"></label></div>
-    ${c.photo_path ? '<div class="photo-ok">Photo saved ✓</div>' : ''}
-    ${c.replaced ? `<div class="replace">New alarm:
-      <select data-alarm="${a.id}" data-k="new_sensor_type"><option>photoelectric</option><option>heat</option></select>
-      <select data-alarm="${a.id}" data-k="new_power_source"><option value="10yr_lithium">10-year lithium</option><option value="hardwired">Hardwired 240V</option></select>
-      <label class="muted">Manufacture date</label><input type="month" data-alarm="${a.id}" data-k="new_manufacture_date" value="${(c.new_manufacture_date || today).slice(0, 7)}"></div>` : ''}
+    <h3>${esc(it.location)} <span class="tag">${esc(it.device_type || '?')}</span>${it.alarm_id ? '' : ' <span class="tag">new</span>'}</h3>
+    <div class="muted">${esc(it.brand || '')} ${it.manufacture_date ? 'made ' + esc(it.manufacture_date.slice(0, 7)) : ''}
+      ${it.expiry_date ? `<span class="${expired ? 'bad' : ''}">· expires ${esc(it.expiry_date.slice(0, 7))}${expired ? ' – EXPIRED' : ''}</span>` : ''}</div>
+    <div class="seg">${lists.action.map(a => `<button data-i="${i}" data-act="${esc(a)}" class="${it.action === a ? 'on' : ''}">${esc(a)}</button>`).join('')}</div>
+    ${it.action === 'Replaced' ? `<div class="replace">New device:
+      <select data-i="${i}" data-f="device_type">${opts(lists.device_type, it.device_type)}</select>
+      <label class="muted">Manufacture date</label><input type="month" data-i="${i}" data-f="manufacture_date" value="${esc((it.manufacture_date || today()).slice(0, 7))}"></div>` : ''}
+    ${it.action === 'Moved' ? `<div class="replace">Moved to: <select data-i="${i}" data-f="new_location">${opts(lists.location, it.new_location, 'Choose location')}</select></div>` : ''}
+    <label class="muted">Quote</label><select data-i="${i}" data-f="quote">${opts(lists.quote, it.quote, 'No quote')}</select>
+    <label class="photo-btn">📷 ${it.photo_path ? 'Retake photo' : 'Photo'}<input type="file" accept="image/*" capture="environment" data-photo="${i}" hidden></label>
+    ${it.photo_path ? '<span class="photo-ok">Photo saved ✓</span>' : ''}
+    ${it.alarm_id ? '' : `<button class="link" data-remove="${i}">Remove</button>`}
   </div>`;
 }
 
-// tick boxes / fields on alarm cards
-$('#jobBody').addEventListener('change', async e => {
-  const t = e.target, id = t.dataset.alarm;
-  if (id && t.dataset.k) {
-    const c = job.checks[id];
-    c[t.dataset.k] = t.type === 'checkbox' ? t.checked : t.type === 'month' ? t.value + '-01' : t.value;
-    if (t.dataset.k === 'replaced') { if (t.checked) { c.new_sensor_type ??= 'photoelectric'; c.new_power_source ??= '10yr_lithium'; c.new_manufacture_date ??= iso(new Date()).slice(0, 7) + '-01'; c.tested_ok = true; } renderJob(); }
+function addForm() {
+  const n = job.adding;
+  return `<h3>Add an alarm or device</h3>
+    <label class="muted">Location</label><select id="adLoc">${opts(lists.location, n.location, 'Choose location')}</select>
+    <label class="muted">Type</label><select id="adType">${opts(lists.device_type, n.device_type)}</select>
+    <label class="muted">Manufacture date</label><input id="adDate" type="month" value="${today().slice(0, 7)}">
+    <label class="muted">Action</label><select id="adAct">${opts(lists.action, 'Serviced')}</select>
+    <label class="muted">Quote</label><select id="adQuote">${opts(lists.quote, '', 'No quote')}</select>
+    <div class="row"><button class="primary" id="adSave">Add</button><button id="adCancel">Cancel</button></div>`;
+}
+
+$('#jobBody').addEventListener('click', async e => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.act) { const it = job.items[+t.dataset.i]; it.action = it.action === t.dataset.act ? '' : t.dataset.act; return renderJob(); }
+  if (t.dataset.x) { job.extra[t.dataset.x] = t.dataset.v; return renderJob(); }
+  if (t.dataset.remove) { job.items.splice(+t.dataset.remove, 1); return renderJob(); }
+  if (t.id === 'addOpen') { job.adding = {}; renderJob(); return $('#addBox').scrollIntoView({ block: 'center' }); }
+  if (t.id === 'adCancel') { job.adding = null; return renderJob(); }
+  if (t.id === 'adSave') {
+    if (!$('#adLoc').value) return msg('Choose a location');
+    job.items.push({ alarm_id: null, location: $('#adLoc').value, device_type: $('#adType').value, manufacture_date: $('#adDate').value + '-01',
+      action: $('#adAct').value, quote: $('#adQuote').value });
+    job.adding = null; msg(''); return renderJob();
   }
+  if (t.dataset.finish) return finish(t.dataset.finish, t);
+});
+
+$('#jobBody').addEventListener('change', async e => {
+  const t = e.target;
+  if (t.dataset.f) { const it = job.items[+t.dataset.i]; it[t.dataset.f] = t.type === 'month' ? t.value + '-01' : t.value; return; }
+  if (t.dataset.xi) { job.extra[t.dataset.xi] = t.value; return; }
   if (t.dataset.photo && t.files[0]) {
-    msg('Uploading photo…');
-    const path = `${companyId}/${job.id}/${t.dataset.photo}-${Date.now()}.jpg`;
-    const { error } = await sb.storage.from('photos').upload(path, t.files[0], { contentType: t.files[0].type || 'image/jpeg' });
-    if (error) return msg('Photo upload failed: ' + error.message);
-    job.checks[t.dataset.photo].photo_path = path; msg(''); renderJob();
+    const isComment = t.dataset.photo === 'comment';
+    const path = await upload(t.files[0], isComment ? 'comment' : 'item' + t.dataset.photo);
+    if (!path) return;
+    if (isComment) job.extra.comment_photo = path; else job.items[+t.dataset.photo].photo_path = path;
+    renderJob();
   }
 });
 
-$('#jobBody').addEventListener('click', async e => {
-  const t = e.target;
-  if (t.dataset.removeNew) { job.newAlarms.splice(+t.dataset.removeNew, 1); return renderJob(); }
-  if (t.id === 'naAdd') {
-    const loc = $('#naLoc').value.trim(); if (!loc) return msg('Enter where the new alarm is');
-    job.newAlarms.push({ location: loc, sensor_type: $('#naType').value, power_source: $('#naPower').value, manufacture_date: $('#naDate').value + '-01', interconnected: true });
-    return renderJob();
-  }
-  if (t.id === 'noAccess') {
+async function finish(outcome, btn) {
+  if (outcome === 'no_access') {
     const why = prompt('Why was there no access? (e.g. no one home, keys didn\'t work)'); if (!why) return;
-    const { error } = await sb.from('jobs').update({ status: 'no_access', outcome_notes: why }).eq('id', job.id);
+    const { error } = await sb.from('jobs').update({ status: 'no_access', outcome: 'no_access', outcome_notes: why }).eq('id', job.id);
     if (error) return msg(error.message);
-    msg('Marked as no access – the office will rebook'); return loadRun();
+    alert('Marked as no access – the office will rebook'); return backToRun();
   }
-  if (t.id === 'complete') {
-    const untested = job.alarms.filter(a => !job.checks[a.id].tested_ok && !job.checks[a.id].replaced);
-    if (untested.length && !confirm(`${untested.length} alarm(s) not marked tested OK or replaced. Complete anyway?`)) return;
-    const boxes = [...document.querySelectorAll('[data-cl]')], compliant = boxes.every(b => b.checked);
-    if (!compliant && !confirm('Not every checklist item is ticked, so the certificate will say NOT COMPLIANT. Continue?')) return;
-    t.disabled = true; t.textContent = 'Saving…';
-    const { data: cert, error } = await sb.rpc('complete_job', { p_job: job.id, p_checks: Object.values(job.checks),
-      p_new_alarms: job.newAlarms, p_compliant: compliant, p_notes: $('#jobNotes').value || null });
-    if (error) { t.disabled = false; t.textContent = 'Complete inspection & issue certificate'; return msg(error.message); }
-    msg(''); alert(`Done ✓ Certificate ${cert} (${compliant ? 'compliant' : 'NOT compliant'})`);
-    loadRun();
-  }
-});
+  const noAction = job.items.filter(it => !it.action);
+  if (noAction.length && !confirm(`${noAction.length} item(s) have no action chosen. Finish anyway?`)) return;
+  if (!job.extra.blind_cleats || !job.extra.safety_switch) return msg('Please answer the blind cleats and safety switch questions');
+  if (!confirm(outcome === 'compliant' ? 'Issue a COMPLIANT certificate?' : 'Mark as NON-COMPLIANT?')) return;
+  btn.disabled = true;
+  const items = job.items.map(({ alarm_id, location, device_type, manufacture_date, power_source, action, new_location, quote, photo_path }) =>
+    ({ alarm_id, location, device_type, manufacture_date, power_source, action, new_location, quote, photo_path }));
+  const { data: cert, error } = await sb.rpc('complete_job', { p_job: job.id, p_items: items, p_outcome: outcome, p_extra: job.extra });
+  btn.disabled = false;
+  if (error) return msg(error.message);
+  alert(`Done ✓ Certificate ${cert} (${outcome === 'compliant' ? 'compliant' : 'NOT compliant'})`);
+  backToRun();
+}
+
+// phone/browser back button returns to the run instead of leaving the app
+const backToRun = () => { if (history.state?.job) history.back(); else loadRun(); };
+$('#back').onclick = backToRun;
+window.addEventListener('popstate', () => loadRun());
 
 // ---------- login ----------
 $('#loginForm').onsubmit = async e => {

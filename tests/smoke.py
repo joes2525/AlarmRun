@@ -26,6 +26,9 @@ window.__DATA = {
   alarms: [{ id: 'a1', location: 'Hallway', storey: 1, sensor_type: 'photoelectric', power_source: 'hardwired', brand: 'Clipsal', expiry_date: '2030-01-01' },
            { id: 'a2', location: 'Bedroom 1', storey: 1, sensor_type: 'photoelectric', power_source: '9v', brand: 'Brooks', expiry_date: '2020-01-01' }],
   tenancies: [{ tenant_names: 'Sam Smith', mobile: '0400 000 000', email: 's@x.com' }],
+  price_items: [{ id: 'x1', kind: 'action', name: 'Serviced', price: 85, active: true }, { id: 'x2', kind: 'action', name: 'Replaced', price: 120, active: true },
+    { id: 'x3', kind: 'quote', name: 'Upgrade', price: 150, active: true }, { id: 'x4', kind: 'location', name: 'Bedroom 2', active: true },
+    { id: 'x5', kind: 'device_type', name: 'Photoelectric', active: true }, { id: 'x6', kind: 'device_type', name: 'Alarm controller', active: true }],
   templates: [{ id: 't1', name: 'Entry notice', subject: 'Entry {Address}', body: 'Hi {Tenant greeting}' }],
 };
 window.__CALLS = [];
@@ -90,6 +93,8 @@ def main():
         step('Templates page', lambda: tab('templates'))
         step('Insert placeholder', lambda: page.locator('#tplChips button').first.click())
         step('Settings page', lambda: tab('settings'))
+        step('Prices page', lambda: (tab('prices'), page.wait_for_selector('#pxLists input[data-f="price"]', timeout=2000)))
+        step('Edit a price and save', lambda: (page.fill('#pxLists input[data-f="price"]', '90'), page.click('#pxSave')))
         for t in ['clients', 'properties', 'tenants', 'jobs', 'certificates', 'invoices', 'inspectors']:
             step(f'{t} list', lambda t=t: tab(t))
         # ---- inspector phone app ----
@@ -108,20 +113,26 @@ def main():
             print(('FAIL ' if len(errors) > before else 'ok   ') + name)
         mstep('Tech: run list shows a job', lambda: m.wait_for_selector('#jobs [data-job]', timeout=3000))
         mstep('Tech: open job', lambda: m.click('#jobs [data-job]'))
-        mstep('Tech: alarms listed', lambda: m.wait_for_selector('[data-alarm="a1"][data-k="tested_ok"]', timeout=3000))
-        mstep('Tech: tick tested + cleaned', lambda: (m.check('[data-alarm="a1"][data-k="tested_ok"]'), m.check('[data-alarm="a1"][data-k="cleaned"]')))
-        mstep('Tech: replace expired alarm', lambda: m.check('[data-alarm="a2"][data-k="replaced"]'))
-        mstep('Tech: replacement fields shown', lambda: m.wait_for_selector('[data-alarm="a2"][data-k="new_manufacture_date"]', timeout=2000))
-        mstep('Tech: add new alarm', lambda: (m.click('details summary'), m.fill('#naLoc', 'Bedroom 2'), m.click('#naAdd')))
-        mstep('Tech: tick checklist', lambda: [m.check(f'[data-cl="{k}"]') for k in ['bedrooms','hallways','storeys','photo','inter','age','tested']])
-        mstep('Tech: complete', lambda: m.click('#complete'))
+        mstep('Tech: items listed with actions', lambda: m.wait_for_selector('[data-act="Serviced"]', timeout=3000))
+        mstep('Tech: Serviced on item 1', lambda: m.locator('[data-i="0"][data-act="Serviced"]').click())
+        mstep('Tech: Replaced on item 2', lambda: m.locator('[data-i="1"][data-act="Replaced"]').click())
+        mstep('Tech: replacement fields', lambda: m.wait_for_selector('[data-i="1"][data-f="manufacture_date"]', timeout=2000))
+        mstep('Tech: quote on item 2', lambda: m.select_option('[data-i="1"][data-f="quote"]', 'Upgrade'))
+        mstep('Tech: add controller', lambda: (m.click('#addOpen'), m.select_option('#adLoc', 'Bedroom 2'), m.select_option('#adType', 'Alarm controller'), m.click('#adSave')))
+        mstep('Tech: blind cleats + safety switch', lambda: (m.click('[data-x="blind_cleats"][data-v="Needed"]'), m.fill('[data-xi="blind_cleats_needed"]', '2'),
+              m.locator('[data-xi="blind_cleats_needed"]').dispatch_event('change'), m.click('[data-x="safety_switch"][data-v="Tested OK"]')))
+        mstep('Tech: property details', lambda: (m.select_option('[data-xi="ceiling_access"]', 'Limited'), m.fill('[data-xi="bedrooms"]', '3'), m.locator('[data-xi="bedrooms"]').dispatch_event('change')))
+        mstep('Tech: Non-compliant', lambda: m.click('[data-finish="non_compliant"]'))
         def check_rpc():
             call = m.evaluate("__CALLS.find(c => c[0]==='rpc' && c[1]==='complete_job')")
             if not call: return errors.append('Tech: complete_job not called')
-            a = call[2]
-            if not (a['p_compliant'] and len(a['p_new_alarms']) == 1 and any(c.get('replaced') for c in a['p_checks'])):
-                errors.append(f'Tech: wrong data sent {a}')
+            a = call[2]; items = a['p_items']
+            ok = (a['p_outcome'] == 'non_compliant' and len(items) == 3 and items[0]['action'] == 'Serviced' and items[1]['action'] == 'Replaced'
+                  and items[1]['quote'] == 'Upgrade' and items[2]['device_type'] == 'Alarm controller' and items[2]['alarm_id'] is None
+                  and a['p_extra']['blind_cleats'] == 'Needed' and a['p_extra']['blind_cleats_needed'] == '2' and a['p_extra']['ceiling_access'] == 'Limited')
+            if not ok: errors.append(f'Tech: wrong data sent {a}')
         mstep('Tech: complete_job sent right data', check_rpc)
+        mstep('Tech: back to run', lambda: m.wait_for_selector('#run:not([hidden])', timeout=3000))
         b.close()
     srv.shutdown()
     print('\n' + ('\n'.join(errors) if errors else 'ALL PASSED'))

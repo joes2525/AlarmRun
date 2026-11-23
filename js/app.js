@@ -84,6 +84,9 @@ async function openProperty(id) {
     <b>Tenant:</b> ${esc(p.tenant_name)} ${esc(p.tenant_phone)} ${esc(p.tenant_email)}<br>
     <b>Lease:</b> ${date(p.lease_start)} → ${date(p.lease_end)}<br>
     <b>Notes:</b> ${esc(p.access_notes)}</p>
+    <form id="propNotesForm" style="display:block"><b>Property notes for inspectors</b><br>
+      <textarea name="notes" rows="2" style="width:100%;box-sizing:border-box">${esc(p.notes || '')}</textarea>
+      <button>Save notes</button></form>
     <form id="breakdownForm"><input name="notes" placeholder="Breakdown details e.g. hallway alarm beeping" size="45" required><button>Log breakdown</button></form>
     <h3>Tenancies (${ten.length})</h3>
     <table><tr><th>Tenants</th><th>Mobile</th><th>Email</th><th>Move in</th><th>Lease</th><th>Vacate</th><th>PM</th></tr>
@@ -105,6 +108,11 @@ async function openProperty(id) {
     <table><tr><th>Date</th><th>Type</th><th>Status</th><th>Certificate</th><th>Notes</th></tr>
     ${jobs.map(j => { const c = j.certificates?.[0] || j.certificates; return `<tr><td>${date(j.scheduled_start)}</td><td>${esc(j.job_type)}</td><td>${esc(j.status)}</td>
       <td>${c?.number ? esc(c.number) + (c.compliant ? ' <span class=good>✓</span>' : ' <span class=bad>✗</span>') : ''}</td><td>${esc(j.notes)}</td></tr>`; }).join('')}</table>`;
+  $('#propNotesForm').onsubmit = async e => {
+    e.preventDefault();
+    const { error } = await sb.from('properties').update({ notes: e.target.notes.value || null }).eq('id', id);
+    msg(error ? error.message : 'Property notes saved');
+  };
   $('#breakdownForm').onsubmit = async e => {
     e.preventDefault();
     const { error } = await sb.from('jobs').insert({ company_id: companyId, property_id: id, job_type: 'callout', status: 'to_book', notes: e.target.notes.value });
@@ -583,6 +591,41 @@ $('#coForm').onsubmit = async e => {
   msg(error ? error.message : 'Settings saved');
 };
 
+// ---------- Prices & lists ----------
+const PX = [['action', 'Actions (priced)', true], ['quote', 'Quotes (priced)', true], ['location', 'Locations', false], ['device_type', 'Alarm / device types', false]];
+let pxRows = [];
+async function loadPrices() {
+  const { data, error } = await sb.from('price_items').select('*').order('sort').order('name');
+  if (error) return msg(error.message);
+  pxRows = data; drawPrices(); $('#pxInfo').textContent = '';
+}
+function drawPrices() {
+  $('#pxLists').innerHTML = PX.map(([k, title, priced]) => `<div><h3 style="margin-top:0">${title}</h3><table class="grp">
+    <tr><th>Name</th>${priced ? '<th>Price</th>' : ''}<th>Show</th></tr>` +
+    pxRows.map((r, i) => r.kind !== k ? '' : `<tr class="prow"><td><input type="text" data-px="${i}" data-f="name" value="${esc(r.name)}"></td>
+      ${priced ? `<td>$<input type="number" step="0.01" min="0" data-px="${i}" data-f="price" value="${r.price ?? 0}"></td>` : ''}
+      <td><input type="checkbox" data-px="${i}" data-f="active"${r.active ? ' checked' : ''}></td></tr>`).join('') +
+    `</table><button type="button" data-pxadd="${k}">+ Add</button></div>`).join('');
+}
+$('#pxLists').oninput = e => {
+  const r = pxRows[+e.target.dataset.px]; if (!r) return;
+  const f = e.target.dataset.f; r[f] = f === 'active' ? e.target.checked : f === 'price' ? Number(e.target.value) : e.target.value;
+  r.dirty = true; $('#pxInfo').textContent = 'Unsaved changes';
+};
+$('#pxLists').onclick = e => {
+  const k = e.target.dataset.pxadd; if (!k) return;
+  pxRows.push({ kind: k, name: '', price: 0, active: true, sort: 99, company_id: companyId, dirty: true }); drawPrices();
+  [...document.querySelectorAll('#pxLists input[data-f="name"]')].pop()?.focus();
+};
+$('#pxSave').onclick = async () => {
+  const rows = pxRows.filter(r => r.dirty && r.name.trim()).map(({ dirty, ...r }) => ({ ...r, name: r.name.trim(), company_id: companyId }));
+  if (!rows.length) return msg('Nothing to save');
+  const withId = rows.filter(r => r.id), fresh = rows.filter(r => !r.id).map(({ id, ...r }) => r);
+  const res = await Promise.all([withId.length ? sb.from('price_items').upsert(withId) : {}, fresh.length ? sb.from('price_items').insert(fresh) : {}]);
+  const err = res.find(r => r.error)?.error;
+  msg(err ? err.message : `Saved ${rows.length}`); if (!err) loadPrices();
+};
+
 // Events
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -634,6 +677,7 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   $('#toArea').classList.toggle('hidden', tab !== 'scheduled');
   if (tab === 'scheduled') { $('#schedSide').append($('#toArea'), $('#dayView')); }
   else { $('#week').after($('#dayView')); }
+  if (tab === 'prices') { $('#listArea').classList.add('hidden'); return loadPrices(); }
   if (tab === 'settings') { $('#listArea').classList.add('hidden'); return loadCompany(); }
   if (tab === 'templates') { $('#listArea').classList.add('hidden'); return loadTemplates(); }
   if (tab === 'messages') { $('#listArea').classList.add('hidden'); return loadMessages(); }
