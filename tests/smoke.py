@@ -20,7 +20,11 @@ window.__DATA = {
     { reason: 'Annual', property_id: 'p1', job_id: null, address_line: '1 Test St', suburb: 'COOMERA', postcode: '4209', agency: 'Evolve', area: 'Coomera Area', last_done: '2025-01-01', due_date: '2026-01-01', notes: null },
     { reason: 'Breakdown', property_id: 'p2', job_id: 'j9', address_line: '2 Test St', suburb: 'COOMERA', postcode: '4209', agency: 'Evolve', area: 'Coomera Area', last_done: null, due_date: '2026-01-02', notes: 'Beeping' }],
   jobs: [{ id: 'j1', inspector_id: 'i1', scheduled_start: '%DAY%T09:00:00+00:00', job_type: 'annual', status: 'booked', notes: null, route_order: 1,
-           property_id: 'p3', properties: { address_line: '3 Test St', suburb: 'COOMERA', postcode: '4209', clients: { name: 'Evolve' } } }],
+           property_id: 'p3', properties: { address_line: '3 Test St', suburb: 'COOMERA', postcode: '4209', storeys: 2, bedrooms: 3, clients: { name: 'Evolve' } },
+           company_id: 'c1', completed_at: '%DAY%T05:00:00Z', inspectors: { name: 'Liam' }, blind_cleats: 'Installed', blind_cleats_needed: 2, safety_switch: 'Tested OK',
+           certificates: [{ number: 'AASA-00001', compliant: true, issued_at: '%DAY%T05:00:00Z' }],
+           alarm_checks: [{ action: 'Serviced', alarms: { location: 'Hallway', sensor_type: 'Photoelectric', power_source: 'hardwired', manufacture_date: '2021-03-01', expiry_date: '2031-03-01' } },
+                          { action: 'Replaced', replace_reason: 'Broken', quote: 'Upgrade', alarms: { location: 'Bedroom 1', sensor_type: 'Photoelectric', power_source: '10yr_lithium', manufacture_date: '2026-06-01', expiry_date: '2036-06-01' } }] }],
   messages: [{ id: 'm1', kind: 'entry_notice', to_name: 'Sam', to_address: 's@x.com', subject: 'Entry notice', body: 'Hi {x}', for_date: '%DAY%', send_after: '%DAY%T09:00:00Z', status: 'queued', properties: { address_line: '3 Test St', suburb: 'COOMERA' } }],
   notice_alerts: [{ job_id: 'j1', visit: '%DAY%', inspector: 'Liam', address_line: '3 Test St', suburb: 'COOMERA', problem: 'No entry notice for this visit date' }],
   alarms: [{ id: 'a1', location: 'Hallway', storey: 1, sensor_type: 'photoelectric', power_source: 'hardwired', brand: 'Clipsal', expiry_date: '2030-01-01' },
@@ -104,6 +108,16 @@ def main():
         step('Edit a price and save', lambda: (page.fill('#pxLists input[data-f="price"]', '90'), page.click('#pxSave')))
         for t in ['clients', 'properties', 'tenants', 'jobs', 'certificates', 'invoices', 'inspectors']:
             step(f'{t} list', lambda t=t: tab(t))
+        # ---- certificate preview ----
+        c = b.new_page(viewport={'width': 900, 'height': 1300})
+        c.on('pageerror', lambda e: errors.append(f'cert pageerror: {e}'))
+        c.route('**/supabase-js@2', lambda r: r.fulfill(body='', content_type='text/javascript'))
+        c.route('**/config.js*', lambda r: r.fulfill(body="window.SUPABASE_URL='x';window.SUPABASE_KEY='y';", content_type='text/javascript'))
+        c.add_init_script(FAKE.replace('%DAY%', day(1)))
+        c.goto(url.replace('index.html', 'cert.html?job=j1')); c.wait_for_timeout(600)
+        step('Certificate renders', lambda: None if 'COMPLIANT' in c.inner_text('#cert') and 'AASA-00001' in c.inner_text('#cert') else errors.append('Certificate did not render'))
+        c.screenshot(path='/tmp/cert-preview.png', full_page=True)
+
         # ---- inspector phone app ----
         m = b.new_page(viewport={'width': 390, 'height': 844})
         m.on('pageerror', lambda e: errors.append(f'tech pageerror: {e}'))

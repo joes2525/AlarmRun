@@ -652,7 +652,7 @@ async function loadCompleted() {
     ${rows.length ? `<table class="grp"><tr><th></th><th>Date</th><th>Property</th><th>Agent</th><th>Inspector</th><th>Result</th><th>Summary</th></tr>` +
       rows.map(r => `<tr class="prow"><td>${btn(r)}</td><td>${when(r.done_at)}</td><td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td>${esc(r.agency)}</td><td>${esc(r.inspector)}</td>
         <td>${r.status === 'no_access' ? '<span class="bad">No access</span>' : r.compliant ? '<span class="good">Compliant</span>' : '<span class="bad">Non-compliant</span>'}
-          ${r.certificate ? `<br><small>${esc(r.certificate)}</small>` : ''}</td>
+          ${r.certificate ? `<br><a href="cert.html?job=${r.id}" target="_blank"><small>${esc(r.certificate)} – preview</small></a>` : ''}</td>
         <td style="white-space:normal">${[r.actions, cleats(r), r.quotes ? '<b>Quote:</b> ' + esc(r.quotes) : '',
           r.safety_switch && r.safety_switch !== 'Tested OK' ? 'Safety switch: ' + esc(r.safety_switch) + (r.safety_switch_notes ? ' – ' + esc(r.safety_switch_notes) : '') : '',
           r.comment ? '<i>' + esc(r.comment) + '</i>' : ''].filter(Boolean).map(x => x.startsWith('<') ? x : esc(x)).join('<br>')}</td></tr>`).join('') + '</table>'
