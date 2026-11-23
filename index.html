@@ -29,6 +29,7 @@
   table.week td.sel{outline:2px solid #1f6feb}
   table.week td[data-day]:hover{background:#eaf2ff}
   table.week td.sel{background:#cfe2ff}
+  table.week td.to{background:#ffd6d6;outline:2px solid #c0392b}
   table.week .tot{font-weight:bold;font-size:15px}
   table.week .over{color:#b00}
   .board{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:10px}
@@ -183,7 +184,7 @@
 
   <div id="tab-scheduled" class="tab hidden">
     <h2>Scheduled</h2>
-    <p style="margin:0;color:#555">From: click a day on the first board and tick jobs. To: click a day on the second board. Then Move.</p>
+    <p style="margin:0;color:#555">Click a day on the board for <b style="color:#1f6feb">From</b> (blue), tick jobs, click another day for <b style="color:#c0392b">To</b> (red), then Move. Click the From day again to start over.</p>
   </div>
 
   <div id="weekArea" class="hidden">
@@ -196,15 +197,11 @@
 
   <div id="toArea" class="hidden">
     <div class="bar" style="flex-wrap:wrap;margin-top:12px">
-      <b id="schedTicked">0 ticked</b> → <b id="toPick">To: click a day below</b>
+      <b id="schedTicked">0 ticked</b> → <b id="toPick">To: click another day on the board</b>
       <button type="button" id="doMove" class="primary">Move</button>
       <button type="button" id="doUnbook">Unbook</button>
       <button type="button" id="doCancel">Cancel jobs</button>
     </div>
-    <h3>To</h3>
-    <div class="bar"><button type="button" id="toPrev">◀</button><b id="toLabel"></b><button type="button" id="toNext">▶</button>
-      <button type="button" data-towk="0">This week</button><button type="button" data-towk="7">Next week</button><button type="button" data-towk="14">The week after that</button></div>
-    <table id="toWeek" class="week"></table>
   </div>
 
   <!-- shared list area -->
@@ -583,10 +580,9 @@ async function fetchWeek(start) {
 async function loadWeek() {
   const jobs = await fetchWeek(weekStart); if (!jobs) return;
   weekJobs = jobs; drawWeek(); openDay();
-  if (tab === 'scheduled') loadTo();
 }
 // Draw any board: table element, week start, jobs, selected inspector/day
-function drawBoard(el, start, jobs, selIns, selDay) {
+function drawBoard(el, start, jobs, selIns, selDay, toIns, toDay) {
   const days = daysFrom(start), cell = {};
   for (const j of jobs) {
     const c = cell[j.ins + '|' + j.day] ??= { total: 0, areas: {} };
@@ -597,7 +593,7 @@ function drawBoard(el, start, jobs, selIns, selDay) {
   el.innerHTML = `<tr><th>Inspector</th>${days.map(d => `<th>${dname(d)}</th>`).join('')}</tr>` +
     inspectors.map(i => `<tr><th>${esc(i.name)}</th>${days.map(d => {
       const c = cell[i.id + '|' + d], over = c && c.total > i.daily_capacity;
-      const sel = selIns === i.id && selDay === d ? ' class="sel"' : '';
+      const sel = selIns === i.id && selDay === d ? ' class="sel"' : toIns === i.id && toDay === d ? ' class="to"' : '';
       return `<td data-ins="${i.id}" data-day="${d}"${sel}>${c ? `<div class="tot ${over ? 'over' : ''}">${c.total}/${i.daily_capacity}</div>` +
         Object.entries(c.areas).sort((x, y) => y[1].n - x[1].n).map(([a, v]) => `${esc(a)} (${v.n})` +
           Object.entries(v.agents).sort((x, y) => y[1] - x[1]).map(([g, k]) => `<br><i style="color:#555">&nbsp;&nbsp;${esc(g)} (${k})</i>`).join('')).join('<br>') : ''}</td>`;
@@ -607,31 +603,25 @@ function drawWeek() {
   $('#wkLabel').textContent = ` Week of ${weekStart} `;
   document.querySelectorAll('.fromLbl').forEach(x => x.textContent = tab === 'scheduled' ? 'From – ' : '');
   const f = $('#bookForm');
-  drawBoard($('#week'), weekStart, weekJobs, f.inspector.value, f.day.value);
+  drawBoard($('#week'), weekStart, weekJobs, f.inspector.value, f.day.value, tab === 'scheduled' ? to.ins : null, to.day);
+  if (tab === 'scheduled') showToPick();
 }
 
-// "To" board on the Scheduled page
-const to = { start: null, jobs: [], ins: null, day: null };
-async function loadTo() {
-  to.start ??= weekStart;
-  const jobs = await fetchWeek(to.start); if (!jobs) return;
-  to.jobs = jobs; drawTo();
-}
-function drawTo() {
-  $('#toLabel').textContent = ` Week of ${to.start} `;
-  drawBoard($('#toWeek'), to.start, to.jobs, to.ins, to.day);
+// Scheduled page: same board, 1st click = From (blue), later clicks = To (red), click From again = start over
+const to = { ins: null, day: null };
+function showToPick() {
   const ins = inspectors.find(i => i.id === to.ins);
-  $('#toPick').textContent = ins ? `To: ${ins.name}, ${new Date(to.day + 'T00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}` : 'To: click a day below';
+  $('#toPick').textContent = ins ? `To: ${ins.name}, ${new Date(to.day + 'T00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}` : 'To: click another day on the board';
 }
-$('#toWeek').onclick = e => { const td = e.target.closest('td[data-day]'); if (!td) return; to.ins = td.dataset.ins; to.day = td.dataset.day; drawTo(); };
-const shiftTo = n => { const d = new Date(to.start + 'T00:00'); d.setDate(d.getDate() + n); to.start = iso(d); loadTo(); };
-$('#toPrev').onclick = () => shiftTo(-7);
-$('#toNext').onclick = () => shiftTo(7);
-document.querySelectorAll('[data-towk]').forEach(b => b.onclick = () => { to.start = planWeek(+b.dataset.towk); loadTo(); });
+const loadTo = () => {};
 
 $('#week').onclick = e => {
   const td = e.target.closest('td[data-day]'); if (!td) return;
-  $('#bookForm').inspector.value = td.dataset.ins; $('#bookForm').day.value = td.dataset.day;
+  const f = $('#bookForm'), isFrom = f.inspector.value === td.dataset.ins && f.day.value === td.dataset.day;
+  if (tab === 'scheduled' && f.day.value && !isFrom) { to.ins = td.dataset.ins; to.day = td.dataset.day; return drawWeek(); }
+  if (tab === 'scheduled' && isFrom) { f.inspector.value = ''; f.day.value = ''; }   // start over
+  else { f.inspector.value = td.dataset.ins; f.day.value = td.dataset.day; }
+  to.ins = to.day = null;
   dayTicked.clear(); showTicked(); drawWeek(); openDay();
 };
 $('#doBook').onclick = async () => {
@@ -680,7 +670,7 @@ async function actOnTicked(change, done) {
   if (!ids.length) return msg('Tick some jobs in the day list first');
   const { error } = await sb.from('jobs').update(change).in('id', ids);
   if (error) return msg(error.message);
-  dayTicked.clear(); showTicked(); msg(done(ids.length));
+  dayTicked.clear(); showTicked(); msg(done(ids.length)); to.ins = to.day = null;
   Promise.all([loadWeek(), renderReady()]);
 }
 $('#doMove').onclick = () => {
