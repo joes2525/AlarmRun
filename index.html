@@ -205,6 +205,7 @@
       <button type="button" id="msgCancel">Cancel ticked</button>
       <button type="button" id="msgRequeue">Re-queue ticked</button>
     </div>
+    <div id="alertBox"></div>
     <table id="msgList" class="grp"></table>
   </div>
 
@@ -608,7 +609,7 @@ async function fetchWeek(start) {
 }
 async function loadWeek() {
   const jobs = await fetchWeek(weekStart); if (!jobs) return;
-  weekJobs = jobs; drawWeek(); openDay();
+  weekJobs = jobs; drawWeek(); openDay(); loadAlerts();
 }
 // Draw any board: table element, week start, jobs, selected inspector/day
 function drawBoard(el, start, jobs, selIns, selDay, toIns, toDay) {
@@ -742,7 +743,19 @@ $('#wkNext').onclick = () => shiftWeek(7);
 
 // ---------- Messages (outbox) ----------
 const msgTicked = new Set();
+async function loadAlerts() {
+  const { data, error } = await sb.from('notice_alerts').select('job_id,visit,inspector,address_line,suburb,problem').not('problem', 'is', null).order('visit');
+  if (error) return msg(error.message);
+  $('#alertBox').innerHTML = !data.length ? '' : `<div style="background:#fff3f3;border:1px solid #e0a0a0;padding:8px;margin:8px 0">
+    <b class="bad">⚠ ${data.length} entry notice problem${data.length === 1 ? '' : 's'}</b>
+    <table class="grp" style="margin-top:6px"><tr><th>Visit</th><th>Inspector</th><th>Property</th><th>Problem</th></tr>` +
+    data.map(a => `<tr class="prow"><td>${date(a.visit)}</td><td>${esc(a.inspector)}</td><td>${esc(a.address_line)}, ${esc(a.suburb)}</td><td>${esc(a.problem)}</td></tr>`).join('') +
+    '</table></div>';
+  const btn = document.querySelector('aside button[data-tab="messages"]');
+  btn.textContent = data.length ? `Messages ⚠ ${data.length}` : 'Messages';
+}
 async function loadMessages() {
+  loadAlerts();
   let q = sb.from('messages').select('id,kind,channel,to_name,to_address,subject,body,for_date,send_after,status,error,properties(address_line,suburb)')
     .order('send_after').limit(500);
   if ($('#msgStatus').value) q = q.eq('status', $('#msgStatus').value);
