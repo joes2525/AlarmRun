@@ -12,7 +12,7 @@ day = lambda n: (monday + dt.timedelta(days=n)).isoformat()
 
 FAKE = r"""
 window.__DATA = {
-  memberships: [{ company_id: 'c1', companies: { name: 'Test Co' } }],
+  memberships: [{ company_id: 'c1', role: 'owner', companies: { name: 'Test Co' } }],
   companies: [{ name: 'Test Co', sender_name: 'Test Co', sender_code: 'test', reply_to_email: 't@x.com' }],
   inspectors: [{ id: 'i1', name: 'Liam', daily_capacity: 18 }, { id: 'i2', name: 'Grant', daily_capacity: 18 }],
   suburb_areas: [{ suburb: 'COOMERA', area: 'Coomera Area' }],
@@ -23,6 +23,9 @@ window.__DATA = {
            property_id: 'p3', properties: { address_line: '3 Test St', suburb: 'COOMERA', postcode: '4209', clients: { name: 'Evolve' } } }],
   messages: [{ id: 'm1', kind: 'entry_notice', to_name: 'Sam', to_address: 's@x.com', subject: 'Entry notice', body: 'Hi {x}', for_date: '%DAY%', send_after: '%DAY%T09:00:00Z', status: 'queued', properties: { address_line: '3 Test St', suburb: 'COOMERA' } }],
   notice_alerts: [{ job_id: 'j1', visit: '%DAY%', inspector: 'Liam', address_line: '3 Test St', suburb: 'COOMERA', problem: 'No entry notice for this visit date' }],
+  alarms: [{ id: 'a1', location: 'Hallway', storey: 1, sensor_type: 'photoelectric', power_source: 'hardwired', brand: 'Clipsal', expiry_date: '2030-01-01' },
+           { id: 'a2', location: 'Bedroom 1', storey: 1, sensor_type: 'photoelectric', power_source: '9v', brand: 'Brooks', expiry_date: '2020-01-01' }],
+  tenancies: [{ tenant_names: 'Sam Smith', mobile: '0400 000 000', email: 's@x.com' }],
   templates: [{ id: 't1', name: 'Entry notice', subject: 'Entry {Address}', body: 'Hi {Tenant greeting}' }],
 };
 window.__CALLS = [];
@@ -37,7 +40,8 @@ function builder(table) {
 }
 window.supabase = { createClient: () => ({
   auth: { getSession: async () => ({ data: { session: { user: { email: 'test@x.com' } } } }), signOut: async () => ({}) },
-  from: builder, rpc: async () => ({ error: null }),
+  from: builder, rpc: async (fn, args) => { window.__CALLS.push(['rpc', fn, args]); return { data: 'C123', error: null }; },
+  storage: { from: () => ({ upload: async () => ({ error: null }) }) },
 }) };
 """
 
@@ -88,6 +92,36 @@ def main():
         step('Settings page', lambda: tab('settings'))
         for t in ['clients', 'properties', 'tenants', 'jobs', 'certificates', 'invoices', 'inspectors']:
             step(f'{t} list', lambda t=t: tab(t))
+        # ---- inspector phone app ----
+        m = b.new_page(viewport={'width': 390, 'height': 844})
+        m.on('pageerror', lambda e: errors.append(f'tech pageerror: {e}'))
+        m.on('console', lambda x: x.type == 'error' and errors.append(f'tech console: {x.text}'))
+        m.on('dialog', lambda d: d.accept('No one home') if d.type == 'prompt' else d.accept())
+        m.route('**/supabase-js@2', lambda r: r.fulfill(body='', content_type='text/javascript'))
+        m.route('**/config.js', lambda r: r.fulfill(body="window.SUPABASE_URL='x';window.SUPABASE_KEY='y';", content_type='text/javascript'))
+        m.add_init_script(FAKE.replace('%DAY%', day(1)))
+        m.goto(url.replace('index.html', 'tech.html')); m.wait_for_timeout(600)
+        def mstep(name, fn):
+            before = len(errors)
+            try: fn(); m.wait_for_timeout(250)
+            except Exception as e: errors.append(f'{name}: {e}')
+            print(('FAIL ' if len(errors) > before else 'ok   ') + name)
+        mstep('Tech: run list shows a job', lambda: m.wait_for_selector('#jobs [data-job]', timeout=3000))
+        mstep('Tech: open job', lambda: m.click('#jobs [data-job]'))
+        mstep('Tech: alarms listed', lambda: m.wait_for_selector('[data-alarm="a1"][data-k="tested_ok"]', timeout=3000))
+        mstep('Tech: tick tested + cleaned', lambda: (m.check('[data-alarm="a1"][data-k="tested_ok"]'), m.check('[data-alarm="a1"][data-k="cleaned"]')))
+        mstep('Tech: replace expired alarm', lambda: m.check('[data-alarm="a2"][data-k="replaced"]'))
+        mstep('Tech: replacement fields shown', lambda: m.wait_for_selector('[data-alarm="a2"][data-k="new_manufacture_date"]', timeout=2000))
+        mstep('Tech: add new alarm', lambda: (m.click('details summary'), m.fill('#naLoc', 'Bedroom 2'), m.click('#naAdd')))
+        mstep('Tech: tick checklist', lambda: [m.check(f'[data-cl="{k}"]') for k in ['bedrooms','hallways','storeys','photo','inter','age','tested']])
+        mstep('Tech: complete', lambda: m.click('#complete'))
+        def check_rpc():
+            call = m.evaluate("__CALLS.find(c => c[0]==='rpc' && c[1]==='complete_job')")
+            if not call: return errors.append('Tech: complete_job not called')
+            a = call[2]
+            if not (a['p_compliant'] and len(a['p_new_alarms']) == 1 and any(c.get('replaced') for c in a['p_checks'])):
+                errors.append(f'Tech: wrong data sent {a}')
+        mstep('Tech: complete_job sent right data', check_rpc)
         b.close()
     srv.shutdown()
     print('\n' + ('\n'.join(errors) if errors else 'ALL PASSED'))

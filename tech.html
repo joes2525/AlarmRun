@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2933">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>AlarmRun – Inspector</title>
+<link rel="stylesheet" href="css/tech.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+</head>
+<body>
+<header>
+  <b>AlarmRun</b>
+  <select id="asInspector" hidden></select>
+  <button id="logout" class="link">Log out</button>
+</header>
+<p id="msg"></p>
+
+<section id="login" hidden>
+  <form id="loginForm" class="card">
+    <h2>Inspector login</h2>
+    <input name="email" type="email" placeholder="Email" required>
+    <input name="password" type="password" placeholder="Password" required>
+    <button class="primary">Sign in</button>
+  </form>
+</section>
+
+<section id="run" hidden>
+  <div class="daybar"><button id="prevDay">◀</button><h2 id="dayLabel"></h2><button id="nextDay">▶</button></div>
+  <div id="jobs"></div>
+</section>
+
+<section id="job" hidden>
+  <button id="back" class="link">← Today's run</button>
+  <div id="jobBody"></div>
+</section>
+
+<script src="js/tech.js"></script>
+</body>
+</html>
