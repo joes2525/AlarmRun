@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
-<link rel="stylesheet" href="css/app.css?v=2611231729">
+<link rel="stylesheet" href="css/app.css?v=2611231738">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611231729"></script>
+<script src="config.js?v=2611231738"></script>
 </head>
 <body>
 <h1>AlarmRun – Office</h1>
@@ -36,6 +36,7 @@
     <button data-tab="due">Due</button>
     <button data-tab="book">Book</button>
     <button data-tab="scheduled">Scheduled</button>
+    <button data-tab="completed">Completed</button>
     <button data-tab="messages">Messages</button>
     <button data-tab="templates">Templates</button>
     <button data-tab="clients">Clients</button>
@@ -150,6 +151,16 @@
    <div id="schedSide"></div>
   </div>
 
+  <div id="tab-completed" class="tab hidden">
+    <h2>Completed</h2>
+    <form id="doneFilter">
+      <label>From <input type="date" name="from"></label> <label>to <input type="date" name="to"></label>
+      <input name="q" placeholder="Address, suburb or agent">
+      <button>Show</button>
+    </form>
+    <div id="doneLists"></div>
+  </div>
+
   <div id="tab-messages" class="tab hidden">
     <h2>Messages</h2>
     <p style="margin:0;color:#555">Automated emails go out in two batches a day, 7am and 7pm Queensland time. <b>Nothing is sent yet</b> – no sending service is connected.</p>
@@ -238,6 +249,6 @@
   </main>
 </section>
 
-<script src="js/app.js?v=2611231729"></script>
+<script src="js/app.js?v=2611231738"></script>
 </body>
 </html>

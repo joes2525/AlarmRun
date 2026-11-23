@@ -627,6 +627,37 @@ $('#pxSave').onclick = async () => {
   msg(err ? err.message : `Saved ${rows.length}`); if (!err) loadPrices();
 };
 
+// ---------- Completed ----------
+async function loadCompleted() {
+  const f = $('#doneFilter');
+  if (!f.from.value) { const d = new Date(); d.setDate(d.getDate() - 7); f.from.value = iso(d); f.to.value = iso(new Date()); }
+  let q = sb.from('completed_summary').select('*').gte('done_at', f.from.value + 'T00:00').lte('done_at', f.to.value + 'T23:59')
+    .order('done_at', { ascending: false }).limit(1000);
+  const t = f.q.value.trim();
+  if (t) q = q.or(`address_line.ilike.%${t}%,suburb.ilike.%${t}%,agency.ilike.%${t}%`);
+  const { data, error } = await q;
+  if (error) return msg(error.message);
+  const done = data.filter(r => r.status === 'completed');
+  const groups = [
+    ['Serviced – no issues', done.filter(r => !r.has_invoice && !r.has_quote), false],
+    ['Invoices – extra work done', done.filter(r => r.has_invoice), true],
+    ['Quotes', done.filter(r => r.has_quote), true],
+    ['No access', data.filter(r => r.status === 'no_access'), true]];
+  const when = d => new Date(d).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+  const cleats = r => r.blind_cleats === 'Installed' ? `Blind cleats installed ×${r.blind_cleats_needed || '?'}` : r.blind_cleats === 'Needed' ? `Blind cleats needed ×${r.blind_cleats_needed || '?'}` : '';
+  $('#doneLists').innerHTML = groups.map(([title, rows, open]) => `<details class="doneGrp" ${open && rows.length ? 'open' : ''}>
+    <summary><b>${title}</b> — ${rows.length}</summary>
+    ${rows.length ? `<table class="grp"><tr><th>Date</th><th>Property</th><th>Agent</th><th>Inspector</th><th>Result</th><th>Summary</th></tr>` +
+      rows.map(r => `<tr class="prow"><td>${when(r.done_at)}</td><td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td>${esc(r.agency)}</td><td>${esc(r.inspector)}</td>
+        <td>${r.status === 'no_access' ? '<span class="bad">No access</span>' : r.compliant ? '<span class="good">Compliant</span>' : '<span class="bad">Non-compliant</span>'}
+          ${r.certificate ? `<br><small>${esc(r.certificate)}</small>` : ''}</td>
+        <td style="white-space:normal">${[r.actions, cleats(r), r.quotes ? '<b>Quote:</b> ' + esc(r.quotes) : '',
+          r.safety_switch && r.safety_switch !== 'Tested OK' ? 'Safety switch: ' + esc(r.safety_switch) + (r.safety_switch_notes ? ' – ' + esc(r.safety_switch_notes) : '') : '',
+          r.comment ? '<i>' + esc(r.comment) + '</i>' : ''].filter(Boolean).map(x => x.startsWith('<') ? x : esc(x)).join('<br>')}</td></tr>`).join('') + '</table>'
+      : '<p style="color:#555">None in this period.</p>'}</details>`).join('');
+}
+$('#doneFilter').onsubmit = e => { e.preventDefault(); loadCompleted(); };
+
 // Events
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -678,6 +709,7 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   $('#toArea').classList.toggle('hidden', tab !== 'scheduled');
   if (tab === 'scheduled') { $('#schedSide').append($('#toArea'), $('#dayView')); }
   else { $('#week').after($('#dayView')); }
+  if (tab === 'completed') { $('#listArea').classList.add('hidden'); return loadCompleted(); }
   if (tab === 'prices') { $('#listArea').classList.add('hidden'); return loadPrices(); }
   if (tab === 'settings') { $('#listArea').classList.add('hidden'); return loadCompany(); }
   if (tab === 'templates') { $('#listArea').classList.add('hidden'); return loadTemplates(); }

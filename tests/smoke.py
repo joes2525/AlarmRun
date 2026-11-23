@@ -30,6 +30,8 @@ window.__DATA = {
     { id: 'x3', kind: 'quote', name: 'Upgrade', price: 150, active: true }, { id: 'x4', kind: 'location', name: 'Bedroom 2', active: true },
     { id: 'x5', kind: 'device_type', name: 'Photoelectric', active: true }, { id: 'x6', kind: 'device_type', name: 'Alarm controller', active: true },
     { id: 'x7', kind: 'replace_reason', name: 'Under warranty', price: 0, active: true }],
+  completed_summary: [{ id: 'j5', status: 'completed', outcome: 'compliant', done_at: '%DAY%T05:00:00Z', address_line: '5 Test St', suburb: 'COOMERA', agency: 'Evolve', inspector: 'Liam', compliant: true, certificate: 'C1', actions: 'Serviced ×4, Replaced (Broken) ×1', quotes: 'Upgrade – Hallway', has_invoice: true, has_quote: true, blind_cleats: 'Installed', blind_cleats_needed: 2 },
+    { id: 'j6', status: 'no_access', done_at: '%DAY%T05:00:00Z', address_line: '6 Test St', suburb: 'COOMERA', agency: 'Evolve', inspector: 'Liam', comment: 'No one home', has_invoice: false, has_quote: false }],
   templates: [{ id: 't1', name: 'Entry notice', subject: 'Entry {Address}', body: 'Hi {Tenant greeting}' }],
 };
 window.__CALLS = [];
@@ -90,6 +92,8 @@ def main():
         step('Pick To day', lambda: page.locator('#week td[data-day]').nth(3).click())
         step('Move', lambda: page.click('#doMove'))
         step('Move saved', lambda: None if page.evaluate("__CALLS.filter(c => c[0]==='jobs' && c[1]==='update').length >= 2") else errors.append('Move: no update sent'))
+        step('Completed page', lambda: (tab('completed'), page.wait_for_selector('#doneLists details', timeout=2000)))
+        step('Completed shows rows', lambda: None if page.locator('#doneLists tr.prow').count() >= 3 else errors.append('Completed: expected rows in Invoices, Quotes, No access'))
         step('Messages page', lambda: tab('messages'))
         step('Templates page', lambda: tab('templates'))
         step('Insert placeholder', lambda: page.locator('#tplChips button').first.click())

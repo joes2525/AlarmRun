@@ -44,3 +44,5 @@ input,select{padding:5px}
 .pxgrid>div{background:#f7f7f7;padding:10px;border-radius:6px}
 .pxgrid input[type=text]{width:100%}
 .pxgrid input[type=number]{width:80px}
+.doneGrp{margin:10px 0;background:#f7f7f7;border-radius:6px;padding:8px 10px}
+.doneGrp summary{cursor:pointer;font-size:16px;padding:4px 0}
