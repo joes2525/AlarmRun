@@ -750,14 +750,13 @@ async function loadMessages() {
   msgTicked.clear();
   const kind = { entry_notice: 'Entry notice' };
   $('#msgInfo').textContent = `${data.length} message${data.length === 1 ? '' : 's'}`;
-  $('#msgList').innerHTML = '<tr><th><input type="checkbox" id="msgAll"></th><th>Send on</th><th>Type</th><th>To</th><th>Property</th><th>Visit</th><th>Status</th><th>Subject (click to preview)</th></tr>' +
-    data.map(m => `<tr class="prow"><td><input type="checkbox" class="mpick" value="${m.id}"></td><td>${date(m.send_after)}</td><td>${kind[m.kind] || esc(m.kind)}</td>
-      <td>${esc(m.to_name)}<br><small>${esc(m.to_address || '—')}</small></td><td>${esc(m.properties?.address_line)}, ${esc(m.properties?.suburb)}</td>
-      <td>${date(m.for_date)}</td><td class="${m.status === 'failed' ? 'bad' : ''}">${esc(m.status)}${m.error ? '<br><small>' + esc(m.error) + '</small>' : ''}</td>
-      <td><a href="#" data-preview="${m.id}">${esc(m.subject)}</a><pre hidden style="white-space:pre-wrap;font:inherit;background:#f7f7f7;padding:8px;margin:6px 0 0">${esc(m.body)}</pre></td></tr>`).join('');
+  $('#msgList').innerHTML = '<tr><th><input type="checkbox" id="msgAll"></th><th>Send on</th><th>Visit</th><th>To / subject</th><th>Message</th></tr>' +
+    data.map(m => `<tr class="prow"><td><input type="checkbox" class="mpick" value="${m.id}"></td><td>${date(m.send_after)}</td><td>${date(m.for_date)}</td>
+      <td style="white-space:normal;width:22%"><b>${esc(m.to_name)}</b> <small>${esc(m.to_address || '— no email')}</small><br>
+        ${esc(m.properties?.address_line)}, ${esc(m.properties?.suburb)} – ${kind[m.kind] || esc(m.kind)}${m.error ? `<br><small class="bad">${esc(m.error)}</small>` : ''}</td>
+      <td style="white-space:pre-wrap;font-size:13px">${esc(m.body)}</td></tr>`).join('');
 }
 $('#msgStatus').onchange = loadMessages;
-$('#msgList').onclick = e => { const id = e.target.dataset.preview; if (!id) return; e.preventDefault(); const pre = e.target.nextElementSibling; pre.hidden = !pre.hidden; };
 $('#msgList').onchange = e => {
   const boxes = e.target.id === 'msgAll' ? [...document.querySelectorAll('.mpick')] : e.target.classList.contains('mpick') ? [e.target] : [];
   boxes.forEach(c => { c.checked = e.target.checked; c.checked ? msgTicked.add(c.value) : msgTicked.delete(c.value); });
