@@ -396,6 +396,13 @@ async function openSchedule() {
 }
 
 // Grouped table used by both Due and Ready to book
+// heading boxes: ticked if everything under them is ticked, dash if only some
+function syncHeads(el) {
+  el.querySelectorAll('[data-group]').forEach(h => {
+    const kids = [...el.querySelectorAll('.pick.' + h.dataset.group)], on = kids.filter(c => c.checked).length;
+    h.checked = kids.length > 0 && on === kids.length; h.indeterminate = on > 0 && on < kids.length;
+  });
+}
 function renderGrouped(rows, el, which, groupBy) {
   const today = iso(new Date()), keys = groupBy.split(',');
   const n = o => Array.isArray(o) ? o.length : Object.values(o).reduce((t, v) => t + n(v), 0);
@@ -428,6 +435,7 @@ function renderGrouped(rows, el, which, groupBy) {
     const g = e.target.dataset.group;
     const boxes = g ? [...el.querySelectorAll('.pick.' + g)] : e.target.classList.contains('pick') ? [e.target] : [];
     boxes.forEach(c => { c.checked = e.target.checked; c.checked ? ticked[which].add(c.dataset.key) : ticked[which].delete(c.dataset.key); });
+    syncHeads(el);
     if (which === 'ready' && g) focusGroup = g;
     counts(); if (which === 'ready') showProps();
   };
@@ -441,7 +449,7 @@ function renderGrouped(rows, el, which, groupBy) {
     el.onclick = e => { const id = e.target.closest('[data-focus]')?.dataset.focus; if (id) { focusGroup = id; showProps(); } };
     showProps();
   }
-  counts();
+  syncHeads(el); counts();
 }
 
 // Right half of Book: the properties in the agent/area you clicked
@@ -463,6 +471,7 @@ $('#readyProps').onchange = e => {
   const k = e.target.dataset.key; if (!k) return;
   e.target.checked ? ticked.ready.add(k) : ticked.ready.delete(k);
   const twin = $('#readyList').querySelector(`.pick[data-key="${k}"]`); if (twin) twin.checked = e.target.checked;
+  syncHeads($('#readyList'));
   counts();
 };
 
