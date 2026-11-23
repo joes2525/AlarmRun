@@ -611,6 +611,7 @@ function drawWeek() {
 
 // Scheduled page: same board, 1st click = From (blue), later clicks = To (red), click From again = start over
 const to = { ins: null, day: null };
+let tickAllDay = false;
 function showToPick() {
   const ins = inspectors.find(i => i.id === to.ins);
   $('#toPick').textContent = ins ? `To: ${ins.name}, ${new Date(to.day + 'T00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}` : 'To: click another day on the board';
@@ -622,7 +623,7 @@ $('#week').onclick = e => {
   const f = $('#bookForm'), isFrom = f.inspector.value === td.dataset.ins && f.day.value === td.dataset.day;
   if (tab === 'scheduled' && f.inspector.value && f.day.value && !isFrom) { to.ins = td.dataset.ins; to.day = td.dataset.day; return drawWeek(); }
   if (tab === 'scheduled' && isFrom) { f.inspector.value = ''; f.day.value = ''; }   // start over
-  else { f.inspector.value = td.dataset.ins; f.day.value = td.dataset.day; }
+  else { f.inspector.value = td.dataset.ins; f.day.value = td.dataset.day; tickAllDay = true; }
   to.ins = to.day = null;
   dayTicked.clear(); showTicked(); drawWeek(); openDay();
 };
@@ -650,6 +651,7 @@ async function openDay() {
       agency: j.properties?.clients?.name || 'No agent', area: areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || 'No area',
       last_done: null, due_date: null, notes: [label[j.job_type] || j.job_type, j.notes].filter(Boolean).join(' – ') }));
     for (const k of [...ticked.day]) if (!rows.some(r => r.job_id === k)) ticked.day.delete(k);
+    if (tickAllDay) { rows.forEach(r => ticked.day.add(r.job_id)); tickAllDay = false; }   // new From day: everything ticked
     $('#dayView').innerHTML = `<h3>From: ${esc(ins.name)} – ${nice} (${data.length}/${ins.daily_capacity})
       <small style="font-weight:normal;color:#555">click an agent or area to show its properties</small></h3>
       <div class="dayBox small"><table id="dayGroups" class="grp heads"></table></div>`;
