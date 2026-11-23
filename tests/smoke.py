@@ -24,7 +24,7 @@ window.__DATA = {
            company_id: 'c1', completed_at: '%DAY%T05:00:00Z', inspectors: { name: 'Liam' }, blind_cleats: 'Installed', blind_cleats_needed: 2, safety_switch: 'Tested OK',
            certificates: [{ number: 'AASA-00001', compliant: true, issued_at: '%DAY%T05:00:00Z' }],
            alarm_checks: [{ action: 'Serviced', alarms: { location: 'Hallway', sensor_type: 'Photoelectric', power_source: 'hardwired', manufacture_date: '2021-03-01', expiry_date: '2031-03-01' } },
-                          { action: 'Replaced', replace_reason: 'Broken', quote: 'Upgrade', alarms: { location: 'Bedroom 1', sensor_type: 'Photoelectric', power_source: '10yr_lithium', manufacture_date: '2026-06-01', expiry_date: '2036-06-01' } }] }],
+                          { action: 'Replaced', replace_reason: 'Broken', quote: 'Upgrade', photo_path: 'c1/j1/a.jpg', alarms: { location: 'Bedroom 1', sensor_type: 'Photoelectric', power_source: '10yr_lithium', manufacture_date: '2026-06-01', expiry_date: '2036-06-01' } }] }],
   messages: [{ id: 'm1', kind: 'entry_notice', to_name: 'Sam', to_address: 's@x.com', subject: 'Entry notice', body: 'Hi {x}', for_date: '%DAY%', send_after: '%DAY%T09:00:00Z', status: 'queued', properties: { address_line: '3 Test St', suburb: 'COOMERA' } }],
   notice_alerts: [{ job_id: 'j1', visit: '%DAY%', inspector: 'Liam', address_line: '3 Test St', suburb: 'COOMERA', problem: 'No entry notice for this visit date' }],
   alarms: [{ id: 'a1', location: 'Hallway', storey: 1, sensor_type: 'photoelectric', power_source: 'hardwired', brand: 'Clipsal', expiry_date: '2030-01-01' },
@@ -51,7 +51,7 @@ function builder(table) {
 window.supabase = { createClient: () => ({
   auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', email: 'test@x.com' } } } }), getUser: async () => ({ data: { user: { id: 'u1' } } }), signOut: async () => ({}) },
   from: builder, rpc: async (fn, args) => { window.__CALLS.push(['rpc', fn, args]); return { data: 'C123', error: null }; },
-  storage: { from: () => ({ upload: async () => ({ error: null }) }) },
+  storage: { from: () => ({ upload: async () => ({ error: null }), createSignedUrls: async (paths) => ({ data: paths.map(() => ({ signedUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22200%22%3E%3Crect width=%22300%22 height=%22200%22 fill=%22%23b8c4d0%22/%3E%3C/svg%3E' })) }) }) },
 }) };
 """
 
@@ -115,6 +115,7 @@ def main():
         c.route('**/config.js*', lambda r: r.fulfill(body="window.SUPABASE_URL='x';window.SUPABASE_KEY='y';", content_type='text/javascript'))
         c.add_init_script(FAKE.replace('%DAY%', day(1)))
         c.goto(url.replace('index.html', 'cert.html?job=j1')); c.wait_for_timeout(600)
+        step('Certificate shows photos', lambda: None if c.locator('.pics img').count() == 1 else errors.append('Certificate photos missing'))
         step('Certificate renders', lambda: None if 'COMPLIANT' in c.inner_text('#cert') and 'AASA-00001' in c.inner_text('#cert') else errors.append('Certificate did not render'))
         c.screenshot(path='/tmp/cert-preview.png', full_page=True)
 
