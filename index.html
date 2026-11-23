@@ -40,7 +40,7 @@
   tr.click{cursor:pointer} tr.click:hover{background:#eef}
   form{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;padding:10px;background:#f4f4f4}
   input,select{padding:5px}
-  .hidden{display:none}
+  .hidden{display:none!important}
   #msg{color:#b00}
   .bad{color:#b00;font-weight:bold} .good{color:#070}
   .bar{display:flex;gap:8px;align-items:center;margin-top:8px}
@@ -182,9 +182,12 @@
     <h3><span id="readyHead">Ready to book</span> <button type="button" id="doBook" class="primary">Book</button> <button type="button" id="unbookDay">Unbook day</button> <button type="button" id="backToDue">Send ticked back to Due</button></h3>
   </div>
 
-  <div id="tab-scheduled" class="tab hidden">
+  <div id="tab-scheduled" class="tab hidden" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+   <div>
     <h2>Scheduled</h2>
     <p style="margin:0;color:#555">Click a day on the board for <b style="color:#1f6feb">From</b> (blue), tick jobs, click another day for <b style="color:#c0392b">To</b> (red), then Move. Click the From day again to start over.</p>
+   </div>
+   <div id="schedSide"></div>
   </div>
 
   <div id="weekArea" class="hidden">
@@ -757,6 +760,8 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   $('#detail').classList.add('hidden');
   $('#weekArea').classList.toggle('hidden', !['book', 'scheduled'].includes(tab));
   $('#toArea').classList.toggle('hidden', tab !== 'scheduled');
+  if (tab === 'scheduled') { $('#schedSide').append($('#toArea'), $('#dayView')); }
+  else { $('#week').after($('#dayView')); }
   if (['due', 'book', 'scheduled'].includes(tab)) { $('#listArea').classList.add('hidden'); return openSchedule(); }
   $('#back').onclick();
 });
