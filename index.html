@@ -19,6 +19,8 @@
   .halves{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
   .halves>div{height:250px;overflow:auto;border:1px solid #ddd}
   table.heads tr.prow,table.heads tr:first-child{display:none}
+  table.heads tr.prow.show{display:table-row}
+  .dayBox.small{height:calc(12 * 2.15em)}
   table.heads td[data-focus]{cursor:pointer} table.heads td[data-focus]:hover{text-decoration:underline}
   table.heads tr.focus td{outline:2px solid #1f6feb}
   .g0 td{background:#1f2933;color:#fff;font-weight:bold}.g1 td{background:#dde3ea;font-weight:bold}.g2 td{background:#eef1f4;font-weight:600}
@@ -367,7 +369,7 @@ const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')
 const addDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };
 const keyOf = r => r.job_id || 'p:' + r.property_id;
 let inspectors = [], areaOf = {}, weekStart = null;
-const ticked = { due: new Set(), ready: new Set() };
+const ticked = { due: new Set(), ready: new Set(), day: new Set() };
 let dueRows = new Map();
 const staged = new Map();      // rows moved to Book
 try { for (const [k, v] of JSON.parse(localStorage.getItem('staged2') || '[]')) staged.set(k, v); } catch {}
@@ -426,6 +428,12 @@ function renderGrouped(rows, el, which, groupBy) {
     if (which === 'ready' && g) focusGroup = g;
     counts(); if (which === 'ready') showProps();
   };
+  if (which === 'day') el.onclick = e => {
+    const id = e.target.closest('[data-focus]')?.dataset.focus; if (!id) return;
+    const rows = [...el.querySelectorAll('.pick.' + id)].map(c => c.closest('tr'));
+    const open = !rows[0]?.classList.contains('show');
+    rows.forEach(tr => tr.classList.toggle('show', open));
+  };
   if (which === 'ready') {
     el.onclick = e => { const id = e.target.closest('[data-focus]')?.dataset.focus; if (id) { focusGroup = id; showProps(); } };
     showProps();
@@ -456,6 +464,7 @@ $('#readyProps').onchange = e => {
 };
 
 function counts() {
+  if (tab === 'scheduled') showTicked();
   $('#dueCount').textContent = `${ticked.due.size} ticked`;
   $('#readyHead').textContent = `Ready to book — ${readyRows.size} (${ticked.ready.size} ticked)`;
   updateBookInfo();
@@ -644,6 +653,17 @@ async function openDay() {
   if (error) return msg(error.message);
   const nice = new Date(day + 'T00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' });
   const label = { callout: 'Breakdown', annual: 'Annual', pre_tenancy: 'Lease' };
+  if (tab === 'scheduled') {
+    const rows = data.map(j => ({ job_id: j.id, property_id: null, address_line: j.properties?.address_line || '', suburb: j.properties?.suburb || '',
+      agency: j.properties?.clients?.name || 'No agent', area: areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || 'No area',
+      last_done: null, due_date: null, notes: [label[j.job_type] || j.job_type, j.notes].filter(Boolean).join(' – ') }));
+    for (const k of [...ticked.day]) if (!rows.some(r => r.job_id === k)) ticked.day.delete(k);
+    $('#dayView').innerHTML = `<h3>From: ${esc(ins.name)} – ${nice} (${data.length}/${ins.daily_capacity})
+      <small style="font-weight:normal;color:#555">click an agent or area to show its properties</small></h3>
+      <div class="dayBox small"><table id="dayGroups" class="grp heads"></table></div>`;
+    renderGrouped(rows, $('#dayGroups'), 'day', 'agency,area');
+    showTicked(); return;
+  }
   $('#dayView').innerHTML = `<h3>${esc(ins.name)} – ${nice} (${data.length}/${ins.daily_capacity})</h3>
     <div class="dayBox"><table class="grp"><tr><th>${tab === 'scheduled' ? '<input type="checkbox" id="dayAll">' : '#'}</th><th>Address</th><th>Agent</th><th>Area</th><th>Reason</th><th>Status</th><th></th><th>Notes</th></tr>` +
     data.map((j, i) => `<tr><td>${tab === 'scheduled' ? `<input type="checkbox" class="dpick" value="${j.id}"${dayTicked.has(j.id) ? ' checked' : ''}>` : i + 1}</td><td>${esc(j.properties?.address_line)}, ${esc(j.properties?.suburb)}</td>
@@ -653,13 +673,8 @@ async function openDay() {
 }
 // unbooked jobs keep existing but lose their inspector/day, so they land back in Ready to book
 // ---------- Scheduled page actions ----------
-const dayTicked = new Set();
+const dayTicked = ticked.day;   // job ids ticked in the From day summary
 const showTicked = () => $('#schedTicked').textContent = `${dayTicked.size} ticked`;
-$('#dayView').addEventListener('change', e => {
-  if (e.target.id === 'dayAll') document.querySelectorAll('.dpick').forEach(c => { c.checked = e.target.checked; c.checked ? dayTicked.add(c.value) : dayTicked.delete(c.value); });
-  else if (e.target.classList.contains('dpick')) e.target.checked ? dayTicked.add(e.target.value) : dayTicked.delete(e.target.value);
-  showTicked();
-});
 async function actOnTicked(change, done) {
   const ids = [...dayTicked];
   if (!ids.length) return msg('Tick some jobs in the day list first');
