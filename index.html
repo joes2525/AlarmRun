@@ -89,6 +89,7 @@
     <button data-tab="certificates">Certificates</button>
     <button data-tab="invoices">Invoices</button>
     <button data-tab="inspectors">Inspectors</button>
+    <button data-tab="settings">Settings</button>
     <button id="logout" style="margin-top:auto">Log out</button>
   </aside>
   <main>
@@ -226,6 +227,21 @@
         <div id="tplPrevBody" style="white-space:pre-wrap"></div>
       </div>
     </div>
+  </div>
+
+  <div id="tab-settings" class="tab hidden">
+    <h2>Company settings</h2>
+    <form id="coForm" style="display:grid;grid-template-columns:180px 1fr;gap:8px;max-width:640px;background:none;padding:0">
+      <label>Company name</label><input name="name" required>
+      <label>Email sender name</label><input name="sender_name" placeholder="e.g. All About Smoke Alarms">
+      <label>Sender code</label><input name="sender_code" placeholder="e.g. aasa" pattern="[a-z0-9-]{2,30}" title="lower-case letters, numbers or dashes">
+      <label>Replies go to</label><input name="reply_to_email" type="email" placeholder="e.g. office@yourcompany.com.au">
+      <label>Phone</label><input name="phone">
+      <label>ABN</label><input name="abn">
+      <label>QBCC licence</label><input name="qbcc_licence">
+      <span></span><button class="primary" style="justify-self:start">Save</button>
+    </form>
+    <p id="coPreview" style="margin-top:14px;background:#f4f4f4;padding:10px;max-width:640px"></p>
   </div>
 
   <div id="weekArea" class="hidden">
@@ -850,6 +866,27 @@ $('#tplSave').onclick = async () => {
   $('#tplInfo').textContent = 'Saved – new messages will use this';
 };
 
+// ---------- Company settings ----------
+const PLATFORM_DOMAIN = 'yourdomain.com.au';   // change when the real sending domain is set up
+async function loadCompany() {
+  const { data, error } = await sb.from('companies').select('name,sender_name,sender_code,reply_to_email,phone,abn,qbcc_licence').eq('id', companyId).single();
+  if (error) return msg(error.message);
+  const f = $('#coForm'); for (const k in data) if (f[k]) f[k].value = data[k] ?? '';
+  coPreview();
+}
+function coPreview() {
+  const f = $('#coForm');
+  $('#coPreview').innerHTML = `Tenants will see emails from:<br><b>${esc(f.sender_name.value || f.name.value)}</b> &lt;${esc(f.sender_code.value || 'code')}@${PLATFORM_DOMAIN}&gt;<br>
+    When they reply, it goes to: <b>${esc(f.reply_to_email.value || '— not set —')}</b>`;
+}
+$('#coForm').oninput = coPreview;
+$('#coForm').onsubmit = async e => {
+  e.preventDefault();
+  const row = {}; for (const [k, v] of new FormData(e.target)) row[k] = v.trim() || null;
+  const { error } = await sb.from('companies').update(row).eq('id', companyId);
+  msg(error ? error.message : 'Settings saved');
+};
+
 // Events
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -901,6 +938,7 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   $('#toArea').classList.toggle('hidden', tab !== 'scheduled');
   if (tab === 'scheduled') { $('#schedSide').append($('#toArea'), $('#dayView')); }
   else { $('#week').after($('#dayView')); }
+  if (tab === 'settings') { $('#listArea').classList.add('hidden'); return loadCompany(); }
   if (tab === 'templates') { $('#listArea').classList.add('hidden'); return loadTemplates(); }
   if (tab === 'messages') { $('#listArea').classList.add('hidden'); return loadMessages(); }
   if (['due', 'book', 'scheduled'].includes(tab)) { $('#listArea').classList.add('hidden'); return openSchedule(); }
