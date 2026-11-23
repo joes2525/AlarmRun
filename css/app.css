@@ -46,3 +46,6 @@ input,select{padding:5px}
 .pxgrid input[type=number]{width:80px}
 .doneGrp{margin:10px 0;background:#f7f7f7;border-radius:6px;padding:8px 10px}
 .doneGrp summary{cursor:pointer;font-size:16px;padding:4px 0}
+button.appr{background:#1f6feb;color:#fff;border:0;border-radius:5px;padding:5px 10px;cursor:pointer}
+button.appr.done{background:#1e8e3e}
+.doneGrp summary button.appr{margin-left:10px;font-size:13px}

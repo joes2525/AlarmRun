@@ -645,10 +645,12 @@ async function loadCompleted() {
     ['No access', data.filter(r => r.status === 'no_access'), true]];
   const when = d => new Date(d).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
   const cleats = r => r.blind_cleats === 'Installed' ? `Blind cleats installed ×${r.blind_cleats_needed || '?'}` : r.blind_cleats === 'Needed' ? `Blind cleats needed ×${r.blind_cleats_needed || '?'}` : '';
-  $('#doneLists').innerHTML = groups.map(([title, rows, open]) => `<details class="doneGrp" ${open && rows.length ? 'open' : ''}>
-    <summary><b>${title}</b> — ${rows.length}</summary>
-    ${rows.length ? `<table class="grp"><tr><th>Date</th><th>Property</th><th>Agent</th><th>Inspector</th><th>Result</th><th>Summary</th></tr>` +
-      rows.map(r => `<tr class="prow"><td>${when(r.done_at)}</td><td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td>${esc(r.agency)}</td><td>${esc(r.inspector)}</td>
+  const btn = r => `<button type="button" class="appr ${r.approved_at ? 'done' : ''}" data-appr="${r.id}">${r.approved_at ? '✓ Approved' : 'Approve'}</button>`;
+  $('#doneLists').innerHTML = groups.map(([title, rows, open], gi) => `<details class="doneGrp" ${open && rows.length ? 'open' : ''}>
+    <summary><b>${title}</b> — ${rows.length} <small style="color:#555">(${rows.filter(r => r.approved_at).length} approved)</small>
+      ${rows.some(r => !r.approved_at) ? `<button type="button" class="appr" data-apprall="${gi}">Approve all</button>` : ''}</summary>
+    ${rows.length ? `<table class="grp"><tr><th></th><th>Date</th><th>Property</th><th>Agent</th><th>Inspector</th><th>Result</th><th>Summary</th></tr>` +
+      rows.map(r => `<tr class="prow"><td>${btn(r)}</td><td>${when(r.done_at)}</td><td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td>${esc(r.agency)}</td><td>${esc(r.inspector)}</td>
         <td>${r.status === 'no_access' ? '<span class="bad">No access</span>' : r.compliant ? '<span class="good">Compliant</span>' : '<span class="bad">Non-compliant</span>'}
           ${r.certificate ? `<br><small>${esc(r.certificate)}</small>` : ''}</td>
         <td style="white-space:normal">${[r.actions, cleats(r), r.quotes ? '<b>Quote:</b> ' + esc(r.quotes) : '',
@@ -657,6 +659,28 @@ async function loadCompleted() {
       : '<p style="color:#555">None in this period.</p>'}</details>`).join('');
 }
 $('#doneFilter').onsubmit = e => { e.preventDefault(); loadCompleted(); };
+// Approve: blue → green, saved in the background
+let doneGroups = [];
+async function setApproved(ids, on) {
+  ids.forEach(id => document.querySelectorAll(`[data-appr="${id}"]`).forEach(b => { b.classList.toggle('done', on); b.textContent = on ? '✓ Approved' : 'Approve'; }));
+  const { data: { user } } = await sb.auth.getUser();
+  const { error } = await sb.from('jobs').update(on ? { approved_at: new Date().toISOString(), approved_by: user?.id } : { approved_at: null, approved_by: null }).in('id', ids);
+  if (error) { msg(error.message); return loadCompleted(); }
+  loadCompleted();
+}
+$('#doneLists').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  e.preventDefault();
+  if (b.dataset.appr) {
+    const on = !b.classList.contains('done');
+    if (!on && !confirm('Undo approval for this job?')) return;
+    return setApproved([b.dataset.appr], on);
+  }
+  if (b.dataset.apprall) {
+    const ids = [...b.closest('details').querySelectorAll('[data-appr]:not(.done)')].map(x => x.dataset.appr);
+    if (ids.length && confirm(`Approve all ${ids.length} jobs in this section?`)) setApproved(ids, true);
+  }
+};
 
 // Events
 $('#loginForm').addEventListener('submit', async e => {

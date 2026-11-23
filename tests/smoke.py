@@ -45,7 +45,7 @@ function builder(table) {
   return b;
 }
 window.supabase = { createClient: () => ({
-  auth: { getSession: async () => ({ data: { session: { user: { email: 'test@x.com' } } } }), signOut: async () => ({}) },
+  auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', email: 'test@x.com' } } } }), getUser: async () => ({ data: { user: { id: 'u1' } } }), signOut: async () => ({}) },
   from: builder, rpc: async (fn, args) => { window.__CALLS.push(['rpc', fn, args]); return { data: 'C123', error: null }; },
   storage: { from: () => ({ upload: async () => ({ error: null }) }) },
 }) };
@@ -94,6 +94,8 @@ def main():
         step('Move saved', lambda: None if page.evaluate("__CALLS.filter(c => c[0]==='jobs' && c[1]==='update').length >= 2") else errors.append('Move: no update sent'))
         step('Completed page', lambda: (tab('completed'), page.wait_for_selector('#doneLists details', timeout=2000)))
         step('Completed shows rows', lambda: None if page.locator('#doneLists tr.prow').count() >= 3 else errors.append('Completed: expected rows in Invoices, Quotes, No access'))
+        step('Approve a job', lambda: page.locator('#doneLists [data-appr]').first.click())
+        step('Approve saved', lambda: None if page.evaluate("__CALLS.some(c => c[0]==='jobs' && c[1]==='update')") else errors.append('Approve: no update sent'))
         step('Messages page', lambda: tab('messages'))
         step('Templates page', lambda: tab('templates'))
         step('Insert placeholder', lambda: page.locator('#tplChips button').first.click())
