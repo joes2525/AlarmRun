@@ -38,7 +38,9 @@ input,select{padding:5px}
 #msg{color:#b00}
 .bad{color:#b00;font-weight:bold} .good{color:#070}
 .bar{display:flex;gap:8px;align-items:center;margin-top:8px}
-.pxgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin-top:10px}
+.pxgrid{display:grid;grid-template-columns:1fr;gap:14px;margin-top:10px}
+.pxgrid table.grp td:first-child{width:auto!important;white-space:normal!important}
+.pxgrid input[type=text]{min-width:320px}
 .pxgrid>div{background:#f7f7f7;padding:10px;border-radius:6px}
 .pxgrid input[type=text]{width:100%}
 .pxgrid input[type=number]{width:80px}
