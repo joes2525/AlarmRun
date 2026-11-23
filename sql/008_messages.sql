@@ -27,6 +27,15 @@ create policy company_isolation on messages
   with check (company_id in (select my_company_ids()));
 grant select, insert, update, delete on messages to authenticated;
 
+-- Messages go out in two batches a day: 7am and 7pm Brisbane time
+create or replace function next_send_slot(t timestamptz) returns timestamptz
+language sql stable as $$
+  select min(s) from (
+    select (((t at time zone 'Australia/Brisbane')::date + d) + h) at time zone 'Australia/Brisbane' as s
+    from (values (0), (1)) days(d), (values (time '07:00'), (time '19:00')) hrs(h)
+  ) x where s >= t
+$$;
+
 -- Keep entry notices in step with bookings
 create or replace function sync_entry_notice() returns trigger
 language plpgsql security definer set search_path = public as $$
@@ -68,7 +77,7 @@ begin
                         subject, body, for_date, send_after, status, error)
   values (new.company_id, 'entry_notice', 'email', new.id, new.property_id, t.id,
           t.tenant_names, t.email, subj, msg, visit,
-          greatest(now(), new.scheduled_start - interval '7 days'),   -- go out up to a week before the visit
+          next_send_slot(greatest(now(), new.scheduled_start - interval '7 days')),   -- next 7am/7pm, up to a week before the visit
           case when t.email is null then 'failed' else 'queued' end,
           case when t.email is null then 'No tenant email on file' end);
   return new;

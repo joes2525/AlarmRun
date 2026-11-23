@@ -197,10 +197,11 @@
 
   <div id="tab-messages" class="tab hidden">
     <h2>Messages</h2>
-    <p style="margin:0;color:#555">Automated emails waiting to go out. <b>Nothing is sent yet</b> – no sending service is connected.</p>
+    <p style="margin:0;color:#555">Automated emails go out in two batches a day, 7am and 7pm Queensland time. <b>Nothing is sent yet</b> – no sending service is connected.</p>
     <div class="bar">
       <select id="msgStatus"><option value="queued">Queued</option><option value="failed">Problems</option><option value="sent">Sent</option><option value="cancelled">Cancelled</option><option value="">All</option></select>
       <span id="msgInfo"></span>
+      <button type="button" id="msgNow" class="primary">Send now</button>
       <button type="button" id="msgCancel">Cancel ticked</button>
       <button type="button" id="msgRequeue">Re-queue ticked</button>
     </div>
@@ -750,8 +751,8 @@ async function loadMessages() {
   msgTicked.clear();
   const kind = { entry_notice: 'Entry notice' };
   $('#msgInfo').textContent = `${data.length} message${data.length === 1 ? '' : 's'}`;
-  $('#msgList').innerHTML = '<tr><th><input type="checkbox" id="msgAll"></th><th>Send on</th><th>Visit</th><th>To / subject</th><th>Message</th></tr>' +
-    data.map(m => `<tr class="prow"><td><input type="checkbox" class="mpick" value="${m.id}"></td><td>${date(m.send_after)}</td><td>${date(m.for_date)}</td>
+  $('#msgList').innerHTML = '<tr><th><input type="checkbox" id="msgAll"></th><th>Send (Qld time)</th><th>Visit</th><th>To / subject</th><th>Message</th></tr>' +
+    data.map(m => `<tr class="prow"><td><input type="checkbox" class="mpick" value="${m.id}"></td><td>${new Date(m.send_after).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td><td>${date(m.for_date)}</td>
       <td style="white-space:normal;width:22%"><b>${esc(m.to_name)}</b> <small>${esc(m.to_address || '— no email')}</small><br>
         ${esc(m.properties?.address_line)}, ${esc(m.properties?.suburb)} – ${kind[m.kind] || esc(m.kind)}${m.error ? `<br><small class="bad">${esc(m.error)}</small>` : ''}</td>
       <td style="white-space:pre-wrap;font-size:13px">${esc(m.body)}</td></tr>`).join('');
@@ -765,6 +766,11 @@ const setMsgStatus = async (status, label) => {
   if (!msgTicked.size) return msg('Tick some messages first');
   const { error } = await sb.from('messages').update({ status, error: null }).in('id', [...msgTicked]);
   msg(error ? error.message : `${label} ${msgTicked.size}`); loadMessages();
+};
+$('#msgNow').onclick = async () => {
+  if (!msgTicked.size) return msg('Tick some messages first');
+  const { error } = await sb.from('messages').update({ send_after: new Date().toISOString(), status: 'queued', error: null }).in('id', [...msgTicked]);
+  msg(error ? error.message : `${msgTicked.size} set to send now (they'll go once a sending service is connected)`); loadMessages();
 };
 $('#msgCancel').onclick = () => setMsgStatus('cancelled', 'Cancelled');
 $('#msgRequeue').onclick = () => setMsgStatus('queued', 'Re-queued');
