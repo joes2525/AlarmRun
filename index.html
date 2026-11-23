@@ -80,6 +80,7 @@
     <button data-tab="due">Due</button>
     <button data-tab="book">Book</button>
     <button data-tab="scheduled">Scheduled</button>
+    <button data-tab="messages">Messages</button>
     <button data-tab="clients">Clients</button>
     <button data-tab="properties">Properties</button>
     <button data-tab="tenants">Tenants</button>
@@ -192,6 +193,18 @@
     <p style="margin:0;color:#555">Click a day on the board for <b style="color:#1f6feb">From</b> (blue), tick jobs, click another day for <b style="color:#c0392b">To</b> (red), then Move. Click the From day again to start over.</p>
    </div>
    <div id="schedSide"></div>
+  </div>
+
+  <div id="tab-messages" class="tab hidden">
+    <h2>Messages</h2>
+    <p style="margin:0;color:#555">Automated emails waiting to go out. <b>Nothing is sent yet</b> – no sending service is connected.</p>
+    <div class="bar">
+      <select id="msgStatus"><option value="queued">Queued</option><option value="failed">Problems</option><option value="sent">Sent</option><option value="cancelled">Cancelled</option><option value="">All</option></select>
+      <span id="msgInfo"></span>
+      <button type="button" id="msgCancel">Cancel ticked</button>
+      <button type="button" id="msgRequeue">Re-queue ticked</button>
+    </div>
+    <table id="msgList" class="grp"></table>
   </div>
 
   <div id="weekArea" class="hidden">
@@ -726,6 +739,37 @@ const shiftWeek = n => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.g
 $('#wkPrev').onclick = () => shiftWeek(-7);
 $('#wkNext').onclick = () => shiftWeek(7);
 
+// ---------- Messages (outbox) ----------
+const msgTicked = new Set();
+async function loadMessages() {
+  let q = sb.from('messages').select('id,kind,channel,to_name,to_address,subject,body,for_date,send_after,status,error,properties(address_line,suburb)')
+    .order('send_after').limit(500);
+  if ($('#msgStatus').value) q = q.eq('status', $('#msgStatus').value);
+  const { data, error } = await q;
+  if (error) return msg(error.message);
+  msgTicked.clear();
+  const kind = { entry_notice: 'Entry notice' };
+  $('#msgInfo').textContent = `${data.length} message${data.length === 1 ? '' : 's'}`;
+  $('#msgList').innerHTML = '<tr><th><input type="checkbox" id="msgAll"></th><th>Send on</th><th>Type</th><th>To</th><th>Property</th><th>Visit</th><th>Status</th><th>Subject (click to preview)</th></tr>' +
+    data.map(m => `<tr class="prow"><td><input type="checkbox" class="mpick" value="${m.id}"></td><td>${date(m.send_after)}</td><td>${kind[m.kind] || esc(m.kind)}</td>
+      <td>${esc(m.to_name)}<br><small>${esc(m.to_address || '—')}</small></td><td>${esc(m.properties?.address_line)}, ${esc(m.properties?.suburb)}</td>
+      <td>${date(m.for_date)}</td><td class="${m.status === 'failed' ? 'bad' : ''}">${esc(m.status)}${m.error ? '<br><small>' + esc(m.error) + '</small>' : ''}</td>
+      <td><a href="#" data-preview="${m.id}">${esc(m.subject)}</a><pre hidden style="white-space:pre-wrap;font:inherit;background:#f7f7f7;padding:8px;margin:6px 0 0">${esc(m.body)}</pre></td></tr>`).join('');
+}
+$('#msgStatus').onchange = loadMessages;
+$('#msgList').onclick = e => { const id = e.target.dataset.preview; if (!id) return; e.preventDefault(); const pre = e.target.nextElementSibling; pre.hidden = !pre.hidden; };
+$('#msgList').onchange = e => {
+  const boxes = e.target.id === 'msgAll' ? [...document.querySelectorAll('.mpick')] : e.target.classList.contains('mpick') ? [e.target] : [];
+  boxes.forEach(c => { c.checked = e.target.checked; c.checked ? msgTicked.add(c.value) : msgTicked.delete(c.value); });
+};
+const setMsgStatus = async (status, label) => {
+  if (!msgTicked.size) return msg('Tick some messages first');
+  const { error } = await sb.from('messages').update({ status, error: null }).in('id', [...msgTicked]);
+  msg(error ? error.message : `${label} ${msgTicked.size}`); loadMessages();
+};
+$('#msgCancel').onclick = () => setMsgStatus('cancelled', 'Cancelled');
+$('#msgRequeue').onclick = () => setMsgStatus('queued', 'Re-queued');
+
 // Events
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -777,6 +821,7 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   $('#toArea').classList.toggle('hidden', tab !== 'scheduled');
   if (tab === 'scheduled') { $('#schedSide').append($('#toArea'), $('#dayView')); }
   else { $('#week').after($('#dayView')); }
+  if (tab === 'messages') { $('#listArea').classList.add('hidden'); return loadMessages(); }
   if (['due', 'book', 'scheduled'].includes(tab)) { $('#listArea').classList.add('hidden'); return openSchedule(); }
   $('#back').onclick();
 });
