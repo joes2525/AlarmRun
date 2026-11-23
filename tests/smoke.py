@@ -28,7 +28,8 @@ window.__DATA = {
   tenancies: [{ tenant_names: 'Sam Smith', mobile: '0400 000 000', email: 's@x.com' }],
   price_items: [{ id: 'x1', kind: 'action', name: 'Serviced', price: 85, active: true }, { id: 'x2', kind: 'action', name: 'Replaced', price: 120, active: true },
     { id: 'x3', kind: 'quote', name: 'Upgrade', price: 150, active: true }, { id: 'x4', kind: 'location', name: 'Bedroom 2', active: true },
-    { id: 'x5', kind: 'device_type', name: 'Photoelectric', active: true }, { id: 'x6', kind: 'device_type', name: 'Alarm controller', active: true }],
+    { id: 'x5', kind: 'device_type', name: 'Photoelectric', active: true }, { id: 'x6', kind: 'device_type', name: 'Alarm controller', active: true },
+    { id: 'x7', kind: 'replace_reason', name: 'Under warranty', price: 0, active: true }],
   templates: [{ id: 't1', name: 'Entry notice', subject: 'Entry {Address}', body: 'Hi {Tenant greeting}' }],
 };
 window.__CALLS = [];
@@ -116,10 +117,10 @@ def main():
         mstep('Tech: items listed with actions', lambda: m.wait_for_selector('[data-act="Serviced"]', timeout=3000))
         mstep('Tech: Serviced on item 1', lambda: m.locator('[data-i="0"][data-act="Serviced"]').click())
         mstep('Tech: Replaced on item 2', lambda: m.locator('[data-i="1"][data-act="Replaced"]').click())
-        mstep('Tech: replacement fields', lambda: m.wait_for_selector('[data-i="1"][data-f="manufacture_date"]', timeout=2000))
+        mstep('Tech: replacement fields', lambda: (m.select_option('[data-i="1"][data-f="replace_reason"]', 'Under warranty'), m.select_option('[data-i="1"][data-f="new_type"]', 'Photoelectric')))
         mstep('Tech: quote on item 2', lambda: m.select_option('[data-i="1"][data-f="quote"]', 'Upgrade'))
-        mstep('Tech: add controller', lambda: (m.click('#addOpen'), m.select_option('#adLoc', 'Bedroom 2'), m.select_option('#adType', 'Alarm controller'), m.click('#adSave')))
-        mstep('Tech: blind cleats + safety switch', lambda: (m.click('[data-x="blind_cleats"][data-v="Needed"]'), m.fill('[data-xi="blind_cleats_needed"]', '2'),
+        mstep('Tech: add controller', lambda: (m.click('#addOpen'), m.select_option('#adLoc', 'Bedroom 2'), m.select_option('#adType', 'Alarm controller'), m.select_option('#adAct', 'Serviced'), m.click('#adSave')))
+        mstep('Tech: blind cleats + safety switch', lambda: (m.click('[data-x="blind_cleats"][data-v="Installed"]'), m.fill('[data-xi="blind_cleats_needed"]', '2'),
               m.locator('[data-xi="blind_cleats_needed"]').dispatch_event('change'), m.click('[data-x="safety_switch"][data-v="Tested OK"]')))
         mstep('Tech: property details', lambda: (m.select_option('[data-xi="ceiling_access"]', 'Limited'), m.fill('[data-xi="bedrooms"]', '3'), m.locator('[data-xi="bedrooms"]').dispatch_event('change')))
         mstep('Tech: Non-compliant', lambda: m.click('[data-finish="non_compliant"]'))
@@ -129,7 +130,7 @@ def main():
             a = call[2]; items = a['p_items']
             ok = (a['p_outcome'] == 'non_compliant' and len(items) == 3 and items[0]['action'] == 'Serviced' and items[1]['action'] == 'Replaced'
                   and items[1]['quote'] == 'Upgrade' and items[2]['device_type'] == 'Alarm controller' and items[2]['alarm_id'] is None
-                  and a['p_extra']['blind_cleats'] == 'Needed' and a['p_extra']['blind_cleats_needed'] == '2' and a['p_extra']['ceiling_access'] == 'Limited')
+                  and a['p_extra']['blind_cleats'] == 'Installed' and items[1]['replace_reason'] == 'Under warranty' and items[1]['device_type'] == 'Photoelectric' and a['p_extra']['blind_cleats_needed'] == '2' and a['p_extra']['ceiling_access'] == 'Limited')
             if not ok: errors.append(f'Tech: wrong data sent {a}')
         mstep('Tech: complete_job sent right data', check_rpc)
         mstep('Tech: back to run', lambda: m.wait_for_selector('#run:not([hidden])', timeout=3000))

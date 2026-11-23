@@ -62,7 +62,7 @@ let lists = null;   // locations, device types, actions, quotes (from the Prices
 async function loadLists() {
   if (lists) return;
   const { data } = await sb.from('price_items').select('kind,name').eq('active', true).order('sort');
-  lists = { location: [], device_type: [], action: [], quote: [] };
+  lists = { location: [], device_type: [], action: [], quote: [], replace_reason: [], extra: [] };
   (data || []).forEach(r => lists[r.kind]?.push(r.name));
 }
 const opts = (arr, sel, blank) => (blank ? `<option value="">${blank}</option>` : '') + arr.map(x => `<option${x === sel ? ' selected' : ''}>${esc(x)}</option>`).join('');
@@ -113,10 +113,12 @@ function renderJob() {
     <div class="card" id="addBox">${job.adding ? addForm() : '<button class="primary" id="addOpen" style="background:#323f4b">➕ Add</button>'}</div>
 
     <div class="card"><h3>Blind cleats</h3>
-      <div class="seg">${['All present', 'Needed', 'Not applicable'].map(v => `<button data-x="blind_cleats" data-v="${v}" class="${x.blind_cleats === v ? 'on' : ''}">${v}</button>`).join('')}</div>
-      ${x.blind_cleats === 'Needed' ? `<label class="muted">How many needed?</label><input type="number" min="1" data-xi="blind_cleats_needed" value="${esc(x.blind_cleats_needed || '')}">` : ''}
+      <div class="seg">${['Compliant', 'Needed', 'Installed'].map(v => `<button data-x="blind_cleats" data-v="${v}" class="${x.blind_cleats === v ? 'on' : ''}">${v}</button>`).join('')}</div>
+      ${['Needed', 'Installed'].includes(x.blind_cleats) ? `<label class="muted">How many ${x.blind_cleats === 'Needed' ? 'needed (quoted)' : 'installed (invoiced)'}?</label>
+        <input type="number" min="1" data-xi="blind_cleats_needed" value="${esc(x.blind_cleats_needed || '')}">` : ''}
       <h3 style="margin-top:12px">Safety switch</h3>
       <div class="seg">${['Tested OK', 'Failed', 'No safety switch', 'Not tested'].map(v => `<button data-x="safety_switch" data-v="${v}" class="${x.safety_switch === v ? 'on' : ''}">${v}</button>`).join('')}</div>
+      ${x.safety_switch === 'Not tested' ? `<textarea rows="2" data-xi="safety_switch_notes" placeholder="Why wasn't it tested?">${esc(x.safety_switch_notes || '')}</textarea>` : ''}
     </div>
 
     <div class="card"><h3>Comments</h3>
@@ -145,10 +147,10 @@ function itemCard(it, i) {
     <div class="muted">${esc(it.brand || '')} ${it.manufacture_date ? 'made ' + esc(it.manufacture_date.slice(0, 7)) : ''}
       ${it.expiry_date ? `<span class="${expired ? 'bad' : ''}">· expires ${esc(it.expiry_date.slice(0, 7))}${expired ? ' – EXPIRED' : ''}</span>` : ''}</div>
     <div class="seg">${lists.action.map(a => `<button data-i="${i}" data-act="${esc(a)}" class="${it.action === a ? 'on' : ''}">${esc(a)}</button>`).join('')}</div>
-    ${it.action === 'Replaced' ? `<div class="replace">New device:
-      <select data-i="${i}" data-f="device_type">${opts(lists.device_type, it.device_type)}</select>
-      <label class="muted">Manufacture date</label><input type="month" data-i="${i}" data-f="manufacture_date" value="${esc((it.manufacture_date || today()).slice(0, 7))}"></div>` : ''}
-    ${it.action === 'Moved' ? `<div class="replace">Moved to: <select data-i="${i}" data-f="new_location">${opts(lists.location, it.new_location, 'Choose location')}</select></div>` : ''}
+    ${it.action === 'Replaced' ? `<div class="replace">
+      <label class="muted">Why was it replaced?</label><select data-i="${i}" data-f="replace_reason">${opts(lists.replace_reason, it.replace_reason, 'Choose reason')}</select>
+      <label class="muted">New device type</label><select data-i="${i}" data-f="new_type">${opts(lists.device_type, it.new_type, 'Choose type')}</select>
+      <label class="muted">New manufacture date</label><input type="month" data-i="${i}" data-f="new_date" value="${esc((it.new_date || '').slice(0, 7))}"></div>` : ''}
     <label class="muted">Quote</label><select data-i="${i}" data-f="quote">${opts(lists.quote, it.quote, 'No quote')}</select>
     <label class="photo-btn">📷 ${it.photo_path ? 'Retake photo' : 'Photo'}<input type="file" accept="image/*" capture="environment" data-photo="${i}" hidden></label>
     ${it.photo_path ? '<span class="photo-ok">Photo saved ✓</span>' : ''}
@@ -160,9 +162,9 @@ function addForm() {
   const n = job.adding;
   return `<h3>Add an alarm or device</h3>
     <label class="muted">Location</label><select id="adLoc">${opts(lists.location, n.location, 'Choose location')}</select>
-    <label class="muted">Type</label><select id="adType">${opts(lists.device_type, n.device_type)}</select>
-    <label class="muted">Manufacture date</label><input id="adDate" type="month" value="${today().slice(0, 7)}">
-    <label class="muted">Action</label><select id="adAct">${opts(lists.action, 'Serviced')}</select>
+    <label class="muted">Type</label><select id="adType">${opts(lists.device_type, '', 'Choose type')}</select>
+    <label class="muted">Manufacture date</label><input id="adDate" type="month">
+    <label class="muted">Action</label><select id="adAct">${opts(lists.action, '', 'Choose action')}</select>
     <label class="muted">Quote</label><select id="adQuote">${opts(lists.quote, '', 'No quote')}</select>
     <div class="row"><button class="primary" id="adSave">Add</button><button id="adCancel">Cancel</button></div>`;
 }
@@ -175,8 +177,8 @@ $('#jobBody').addEventListener('click', async e => {
   if (t.id === 'addOpen') { job.adding = {}; renderJob(); return $('#addBox').scrollIntoView({ block: 'center' }); }
   if (t.id === 'adCancel') { job.adding = null; return renderJob(); }
   if (t.id === 'adSave') {
-    if (!$('#adLoc').value) return msg('Choose a location');
-    job.items.push({ alarm_id: null, location: $('#adLoc').value, device_type: $('#adType').value, manufacture_date: $('#adDate').value + '-01',
+    if (!$('#adLoc').value || !$('#adType').value || !$('#adAct').value) return msg('Choose a location, type and action');
+    job.items.push({ alarm_id: null, location: $('#adLoc').value, device_type: $('#adType').value, manufacture_date: $('#adDate').value ? $('#adDate').value + '-01' : '',
       action: $('#adAct').value, quote: $('#adQuote').value });
     job.adding = null; msg(''); return renderJob();
   }
@@ -206,10 +208,17 @@ async function finish(outcome, btn) {
   const noAction = job.items.filter(it => !it.action);
   if (noAction.length && !confirm(`${noAction.length} item(s) have no action chosen. Finish anyway?`)) return;
   if (!job.extra.blind_cleats || !job.extra.safety_switch) return msg('Please answer the blind cleats and safety switch questions');
+  if (['Needed', 'Installed'].includes(job.extra.blind_cleats) && !job.extra.blind_cleats_needed) return msg('Enter how many blind cleats');
+  const badRep = job.items.find(it => it.action === 'Replaced' && (!it.replace_reason || !it.new_type));
+  if (badRep) return msg(`${badRep.location}: choose why it was replaced and the new device type`);
   if (!confirm(outcome === 'compliant' ? 'Issue a COMPLIANT certificate?' : 'Mark as NON-COMPLIANT?')) return;
   btn.disabled = true;
-  const items = job.items.map(({ alarm_id, location, device_type, manufacture_date, power_source, action, new_location, quote, photo_path }) =>
-    ({ alarm_id, location, device_type, manufacture_date, power_source, action, new_location, quote, photo_path }));
+  const items = job.items.map(it => {
+    const rep = it.action === 'Replaced';
+    return { alarm_id: it.alarm_id, location: it.location, action: it.action, quote: it.quote, photo_path: it.photo_path,
+      replace_reason: rep ? it.replace_reason : null,
+      device_type: rep ? it.new_type : it.device_type, manufacture_date: rep ? (it.new_date || '') : it.manufacture_date };
+  });
   const { data: cert, error } = await sb.rpc('complete_job', { p_job: job.id, p_items: items, p_outcome: outcome, p_extra: job.extra });
   btn.disabled = false;
   if (error) return msg(error.message);

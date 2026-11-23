@@ -592,7 +592,8 @@ $('#coForm').onsubmit = async e => {
 };
 
 // ---------- Prices & lists ----------
-const PX = [['action', 'Actions (priced)', true], ['quote', 'Quotes (priced)', true], ['location', 'Locations', false], ['device_type', 'Alarm / device types', false]];
+const PX = [['action', 'Actions (priced)', true], ['replace_reason', 'Replacement reasons (priced – used instead of the Replaced price)', true], ['quote', 'Quotes (priced)', true],
+  ['extra', 'Other charges (priced)', true], ['location', 'Locations', false], ['device_type', 'Alarm / device types', false]];
 let pxRows = [];
 async function loadPrices() {
   const { data, error } = await sb.from('price_items').select('*').order('sort').order('name');
