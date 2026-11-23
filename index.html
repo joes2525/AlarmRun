@@ -81,6 +81,7 @@
     <button data-tab="book">Book</button>
     <button data-tab="scheduled">Scheduled</button>
     <button data-tab="messages">Messages</button>
+    <button data-tab="templates">Templates</button>
     <button data-tab="clients">Clients</button>
     <button data-tab="properties">Properties</button>
     <button data-tab="tenants">Tenants</button>
@@ -207,6 +208,24 @@
     </div>
     <div id="alertBox"></div>
     <table id="msgList" class="grp"></table>
+  </div>
+
+  <div id="tab-templates" class="tab hidden">
+    <h2>Templates</h2>
+    <div class="bar"><select id="tplPick"></select> <button type="button" id="tplSave" class="primary">Save</button> <span id="tplInfo"></span></div>
+    <p style="margin:6px 0;color:#555">Click a placeholder to insert it where your cursor is. It's swapped for the real details when the message is made.</p>
+    <div id="tplChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+    <div class="halves" style="grid-template-columns:1fr 1fr">
+      <div style="height:auto;border:0">
+        <label>Subject<br><input id="tplSubject" style="width:100%;box-sizing:border-box"></label><br><br>
+        <label>Message<br><textarea id="tplBody" rows="18" style="width:100%;box-sizing:border-box;font:inherit"></textarea></label>
+      </div>
+      <div style="height:auto;border:1px solid #ddd;padding:10px;background:#fafafa">
+        <b>Preview</b> <small style="color:#555">(example details)</small>
+        <p id="tplPrevSubject" style="font-weight:bold"></p>
+        <div id="tplPrevBody" style="white-space:pre-wrap"></div>
+      </div>
+    </div>
   </div>
 
   <div id="weekArea" class="hidden">
@@ -762,7 +781,7 @@ async function loadMessages() {
   const { data, error } = await q;
   if (error) return msg(error.message);
   msgTicked.clear();
-  const kind = { entry_notice: 'Entry notice' };
+  const kind = { entry_notice: 'Entry notice', entry_notice_changed: 'Entry notice – date changed' };
   $('#msgInfo').textContent = `${data.length} message${data.length === 1 ? '' : 's'}`;
   $('#msgList').innerHTML = '<tr><th><input type="checkbox" id="msgAll"></th><th>Send (Qld time)</th><th>Visit</th><th>To / subject</th><th>Message</th></tr>' +
     data.map(m => `<tr class="prow"><td><input type="checkbox" class="mpick" value="${m.id}"></td><td>${new Date(m.send_after).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td><td>${date(m.for_date)}</td>
@@ -787,6 +806,49 @@ $('#msgNow').onclick = async () => {
 };
 $('#msgCancel').onclick = () => setMsgStatus('cancelled', 'Cancelled');
 $('#msgRequeue').onclick = () => setMsgStatus('queued', 'Re-queued');
+
+// ---------- Templates ----------
+const PLACEHOLDERS = ['Tenant greeting', 'Tenant names', 'Address', 'Suburb', 'Postcode', 'Visit date', 'Old visit date', 'Inspector', 'Company'];
+let templates = [], tplField = null;
+const sampleVars = () => ({ 'Tenant greeting': 'Sam & Alex', 'Tenant names': 'Sam Smith & Alex Jones', Address: '8 Aaron Street', Suburb: 'COOMERA',
+  Postcode: '4209', 'Visit date': 'Tuesday 8 December 2026', 'Old visit date': 'Friday 4 December 2026', Inspector: 'Liam',
+  Company: ($('#who').textContent.split(' · ')[0] || 'Your company') });
+const fill = (t, v) => Object.entries(v).reduce((s, [k, x]) => s.split('{' + k + '}').join(x), t || '');
+async function loadTemplates() {
+  const { data, error } = await sb.from('templates').select('*').order('name');
+  if (error) return msg(error.message);
+  templates = data;
+  const cur = $('#tplPick').value;
+  $('#tplPick').innerHTML = data.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  if (cur) $('#tplPick').value = cur;
+  $('#tplChips').innerHTML = PLACEHOLDERS.map(p => `<button type="button" data-ph="${p}">{${p}}</button>`).join('');
+  showTemplate();
+}
+function showTemplate() {
+  const t = templates.find(x => x.id === $('#tplPick').value); if (!t) return;
+  $('#tplSubject').value = t.subject || ''; $('#tplBody').value = t.body || ''; $('#tplInfo').textContent = '';
+  previewTemplate();
+}
+function previewTemplate() {
+  const v = sampleVars();
+  $('#tplPrevSubject').textContent = fill($('#tplSubject').value, v);
+  $('#tplPrevBody').textContent = fill($('#tplBody').value, v);
+}
+$('#tplPick').onchange = showTemplate;
+['#tplSubject', '#tplBody'].forEach(id => { $(id).oninput = () => { previewTemplate(); $('#tplInfo').textContent = 'Unsaved changes'; }; $(id).onfocus = () => tplField = $(id); });
+$('#tplChips').onclick = e => {
+  const ph = e.target.dataset.ph; if (!ph) return;
+  const f = tplField || $('#tplBody'), at = f.selectionStart ?? f.value.length;
+  f.value = f.value.slice(0, at) + '{' + ph + '}' + f.value.slice(f.selectionEnd ?? at);
+  f.focus(); f.selectionStart = f.selectionEnd = at + ph.length + 2; f.oninput();
+};
+$('#tplSave').onclick = async () => {
+  const id = $('#tplPick').value;
+  const { error } = await sb.from('templates').update({ subject: $('#tplSubject').value, body: $('#tplBody').value, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) return msg(error.message);
+  const t = templates.find(x => x.id === id); t.subject = $('#tplSubject').value; t.body = $('#tplBody').value;
+  $('#tplInfo').textContent = 'Saved – new messages will use this';
+};
 
 // Events
 $('#loginForm').addEventListener('submit', async e => {
@@ -839,6 +901,7 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   $('#toArea').classList.toggle('hidden', tab !== 'scheduled');
   if (tab === 'scheduled') { $('#schedSide').append($('#toArea'), $('#dayView')); }
   else { $('#week').after($('#dayView')); }
+  if (tab === 'templates') { $('#listArea').classList.add('hidden'); return loadTemplates(); }
   if (tab === 'messages') { $('#listArea').classList.add('hidden'); return loadMessages(); }
   if (['due', 'book', 'scheduled'].includes(tab)) { $('#listArea').classList.add('hidden'); return openSchedule(); }
   $('#back').onclick();
