@@ -14,10 +14,10 @@ table.grp tr:not([class]) td:not(:last-child),table.grp tr.prow td:not(:last-chi
 table.heads tr.prow,table.heads tr:first-child{display:none}
 table.heads tr.prow.show{display:table-row}
 .dayBox.small{height:auto;max-height:calc(12 * 2.15em)}
-#schedSide{height:15em;overflow:hidden}
+#schedSide{height:17.5em;overflow:hidden}
 #schedSide .dayBox{max-height:calc(5 * 2.15em)}
 #schedSide h3{margin:6px 0;font-size:15px}
-#schedSide .bar{margin-top:0!important}
+#schedSide .bar{margin-top:6px!important}
 table.heads td[data-focus]{cursor:pointer} table.heads td[data-focus]:hover{text-decoration:underline}
 table.heads tr.focus td{outline:2px solid #1f6feb}
 .g0 td{background:#1f2933;color:#fff;font-weight:bold}.g1 td{background:#dde3ea;font-weight:bold}.g2 td{background:#eef1f4;font-weight:600}
@@ -62,7 +62,7 @@ button.appr.done{background:#1e8e3e}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 aside .submenu{display:flex;flex-direction:column;gap:2px;margin-left:10px;border-left:2px solid #323f4b;padding-left:6px}
 aside .submenu button{font-size:14px}
-table.week td.avail{background:#f0faf2} table.week td.unavail{background:#fdf0f0}
+table.week td.avail{background:#dcf3e1} table.week td.unavail{background:#f9d9d9}
 table.week td.sel{background:#cfe2ff!important} table.week td.to{background:#ffd6d6!important}
 .insFilter{display:inline-block;position:relative;margin-left:8px}
 .insFilter summary{cursor:pointer;padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#fff;list-style:none}

@@ -410,7 +410,7 @@ function drawBoard(el, start, jobs, selIns, selDay, toIns, toDay) {
 }
 function drawWeek() {
   $('#wkLabel').textContent = ` Week of ${weekStart} `;
-  document.querySelectorAll('.fromLbl').forEach(x => x.textContent = tab === 'scheduled' ? 'From – ' : '');
+  $('#boardHead').hidden = tab === 'scheduled';
   const two = tab === 'scheduled';
   $('#week2Wrap').hidden = !two;
   if (two) { $('#wk2Label').textContent = `Following week – ${nextWeek()}`; drawBoard($('#week2'), nextWeek(), week2Jobs, pick.ins, pick.day, to.ins, to.day); }
@@ -491,6 +491,8 @@ async function actOnTicked(change, done) {
 }
 $('#doMove').onclick = async () => {
   if (!to.ins) return msg('Click a day on the To board first');
+  const insTo = inspectors.find(i => i.id === to.ins);
+  if (!isAvailable(insTo, to.day) && !confirm(`${insTo.name} isn't available on ${to.day}. Move anyway?`)) return;
   const from = { ins: pick.ins, day: pick.day }, dest = { ...to };
   await actOnTicked({ inspector_id: dest.ins, scheduled_start: `${dest.day}T09:00:00` },
     n => `Moved ${n} to ${inspectors.find(i => i.id === dest.ins).name} on ${dest.day}`);
@@ -921,7 +923,7 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   $('#detail').classList.add('hidden');
   $('#weekArea').classList.toggle('hidden', !['book', 'scheduled'].includes(tab));
   $('#toArea').classList.toggle('hidden', tab !== 'scheduled');
-  if (tab === 'scheduled') { $('#schedSide').append($('#toArea'), $('#dayView')); }
+  if (tab === 'scheduled') { $('#schedSide').append($('#dayView'), $('#toArea')); }
   else { $('#week').after($('#dayView')); }
   if (tab === 'inspectors') loadAvail();
   if (tab === 'home') { $('#listArea').classList.add('hidden'); return loadHome(); }
