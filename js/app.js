@@ -500,7 +500,7 @@ async function loadAlerts() {
 async function loadMessages() {
   loadAlerts();
   let q = sb.from('messages').select('id,kind,channel,to_name,to_address,subject,body,for_date,send_after,status,error,properties(address_line,suburb)')
-    .order('send_after').limit(500);
+    .order('for_date', { nullsFirst: false }).order('send_after').limit(500);
   if ($('#msgStatus').value) q = q.eq('status', $('#msgStatus').value);
   if ($('#msgChannel').value) q = q.eq('channel', $('#msgChannel').value);
   const { data, error } = await q;
@@ -510,7 +510,8 @@ async function loadMessages() {
   $('#msgInfo').textContent = `${data.length} message${data.length === 1 ? '' : 's'}`;
   const type = { email: '✉ Email', sms: '💬 Text', mail: '📮 Mail' };
   $('#msgList').innerHTML = '<tr><th><input type="checkbox" id="msgAll"></th><th>Send (Qld time)</th><th>Type</th><th>To / subject</th><th>Message</th></tr>' +
-    data.map(m => `<tr class="prow"><td><input type="checkbox" class="mpick" value="${m.id}" data-ch="${m.channel}"></td>
+    data.map((m, i) => (m.for_date !== data[i - 1]?.for_date ? `<tr class="g1"><td></td><td colspan="4">Inspection ${m.for_date ? new Date(m.for_date + 'T00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' }) : '– no date'} — ${data.filter(x => x.for_date === m.for_date).length}</td></tr>` : '') +
+      `<tr class="prow"><td><input type="checkbox" class="mpick" value="${m.id}" data-ch="${m.channel}"></td>
       <td>${m.channel === 'mail' ? (m.status === 'sent' ? 'Posted' : 'Print & post now') : new Date(m.send_after).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td>
       <td>${type[m.channel] || esc(m.channel)}</td>
       <td style="white-space:normal;width:22%"><b>${esc(m.to_name)}</b> <small>${esc(m.to_address || '— none')}</small><br>
