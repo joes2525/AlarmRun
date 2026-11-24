@@ -646,7 +646,7 @@ async function loadCompleted() {
   const when = d => new Date(d).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
   const cleats = r => r.blind_cleats === 'Installed' ? `Blind cleats installed ×${r.blind_cleats_needed || '?'}` : r.blind_cleats === 'Needed' ? `Blind cleats needed ×${r.blind_cleats_needed || '?'}` : '';
   const btn = r => `<button type="button" class="appr ${r.approved_at ? 'done' : ''}" data-appr="${r.id}">${r.approved_at ? '✓ Approved' : 'Approve'}</button>`;
-  $('#doneLists').innerHTML = groups.map(([title, rows, open], gi) => `<details class="doneGrp" ${open && rows.length ? 'open' : ''}>
+  $('#doneLists').innerHTML = groups.map(([title, rows, open], gi) => `<details class="doneGrp" open>
     <summary><b>${title}</b> — ${rows.length} <small style="color:#555">(${rows.filter(r => r.approved_at).length} approved)</small>
       ${rows.some(r => !r.approved_at) ? `<button type="button" class="appr" data-apprall="${gi}">Approve all</button>` : ''}</summary>
     ${rows.length ? `<table class="grp"><tr><th></th><th>Date</th><th>Property</th><th>Agent</th><th>Inspector</th><th>Result</th><th>Summary</th></tr>` +
