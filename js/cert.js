@@ -5,6 +5,8 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 const d = v => v ? new Date(v).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Brisbane' }) : '—';
 const ym = v => v ? new Date(v + 'T00:00').toLocaleDateString('en-AU', { month: 'short', year: 'numeric' }) : '—';
 
+const fillDoc = (t, v) => Object.entries(v).reduce((s, [k, x]) => s.split('{' + k + '}').join(x ?? ''), t || '');
+
 async function load() {
   const id = new URLSearchParams(location.search).get('job');
   if (!id) return $('#msg').textContent = 'No job given';
@@ -16,7 +18,9 @@ async function load() {
       inspectors(name), certificates(number, compliant, issued_at),
       alarm_checks(action, replace_reason, quote, photo_path, alarms(location, sensor_type, power_source, brand, manufacture_date, expiry_date))`).eq('id', id).single();
   if (error) return $('#msg').textContent = error.message;
-  const { data: co } = await sb.from('companies').select('name, sender_name, phone, reply_to_email, abn, qbcc_licence').eq('id', j.company_id).single();
+  const [{ data: co }, { data: words }] = await Promise.all([
+    sb.from('companies').select('name, sender_name, phone, reply_to_email, abn, qbcc_licence').eq('id', j.company_id).single(),
+    sb.from('templates').select('kind, body').eq('channel', 'doc').in('kind', ['cert_compliant', 'cert_non_compliant'])]);
   const p = j.properties || {}, cert = [].concat(j.certificates || [])[0] || {}, ok = cert.compliant;
   const today = new Date().toISOString().slice(0, 10);
   const checks = (j.alarm_checks || []).sort((a, b) => (a.alarms?.location || '').localeCompare(b.alarms?.location || ''));
@@ -58,9 +62,11 @@ async function load() {
       <div><span>Safety switch</span>${esc(j.safety_switch || '—')}${j.safety_switch_notes ? ` – ${esc(j.safety_switch_notes)}` : ''}</div>
     </div>
     ${j.outcome_notes ? `<h2>Inspector comments</h2><p>${esc(j.outcome_notes)}</p>` : ''}
-    <p class="stmt">${ok
-      ? 'The smoke alarms at this property were inspected, tested and cleaned on the date above and, at the time of inspection, met the requirements of Queensland smoke alarm legislation.'
-      : 'The smoke alarms at this property were inspected on the date above and, at the time of inspection, did <b>not</b> meet the requirements of Queensland smoke alarm legislation. See the work recommended above.'}</p>
+    <p class="stmt">${esc(fillDoc((words || []).find(w => w.kind === (ok ? 'cert_compliant' : 'cert_non_compliant'))?.body
+      || (ok ? 'The smoke alarms at this property were inspected, tested and cleaned on the date above and, at the time of inspection, met the requirements of Queensland smoke alarm legislation.'
+             : 'The smoke alarms at this property were inspected on the date above and, at the time of inspection, did not meet the requirements of Queensland smoke alarm legislation. See the work recommended above.'),
+      { Address: p.address_line, Suburb: p.suburb, Postcode: p.postcode || '', 'Visit date': d(j.completed_at || j.scheduled_start), Company: co?.sender_name || co?.name || '',
+        Inspector: j.inspectors?.name || '' })).replace(/\n/g, '<br>')}</p>
     ${pics.some(x => x.url) ? `<h2>Photos</h2><div class="pics">${pics.filter(x => x.url).map(x =>
       `<figure><img src="${esc(x.url)}" alt="${esc(x.label)}"><figcaption>${esc(x.label)}</figcaption></figure>`).join('')}</div>` : ''}
     <footer>Issued by ${esc(co?.sender_name || co?.name)} · Certificate ${esc(cert.number || '')} · ${d(cert.issued_at)}</footer>`;

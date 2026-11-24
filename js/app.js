@@ -616,20 +616,24 @@ const sampleVars = () => ({ 'Tenant greeting': 'Sam & Alex', 'Tenant names': 'Sa
   Company: ($('#who').textContent.split(' · ')[0] || 'Your company') });
 const fill = (t, v) => Object.entries(v).reduce((s, [k, x]) => s.split('{' + k + '}').join(x), t || '');
 async function loadTemplates() {
-  const { data, error } = await sb.from('templates').select('*').order('name');
+  const docs = tab === 'docs';
+  $('#tplTitle').textContent = docs ? 'Document wording' : 'Message templates';
+  let q = sb.from('templates').select('*').order('name');
+  q = docs ? q.eq('channel', 'doc') : q.neq('channel', 'doc');
+  const { data, error } = await q;
   if (error) return msg(error.message);
   templates = data;
   const cur = $('#tplPick').value;
-  $('#tplPick').innerHTML = data.map(t => `<option value="${t.id}">${t.channel === 'sms' ? '💬 ' : '✉ '}${esc(t.name)}</option>`).join('');
-  if (cur) $('#tplPick').value = cur;
+  $('#tplPick').innerHTML = data.map(t => `<option value="${t.id}">${t.channel === 'sms' ? '💬 ' : t.channel === 'doc' ? '📄 ' : '✉ '}${esc(t.name)}</option>`).join('');
+  if (cur && data.some(t => t.id === cur)) $('#tplPick').value = cur;
   $('#tplChips').innerHTML = PLACEHOLDERS.map(p => `<button type="button" data-ph="${p}">{${p}}</button>`).join('');
   showTemplate();
 }
 function showTemplate() {
   const t = templates.find(x => x.id === $('#tplPick').value); if (!t) return;
   $('#tplSubject').value = t.subject || ''; $('#tplBody').value = t.body || ''; $('#tplInfo').textContent = '';
-  const sms = t.channel === 'sms';
-  $('#tplSubject').closest('label').hidden = sms; $('#tplBody').rows = sms ? 5 : 18;
+  const sms = t.channel === 'sms', doc = t.channel === 'doc';
+  $('#tplSubject').closest('label').hidden = sms || doc; $('#tplBody').rows = sms ? 5 : doc ? 10 : 18;
   previewTemplate();
 }
 function previewTemplate() {
@@ -637,6 +641,7 @@ function previewTemplate() {
   $('#tplPrevSubject').textContent = fill($('#tplSubject').value, v);
   $('#tplPrevBody').textContent = fill($('#tplBody').value, v);
   const t = templates.find(x => x.id === $('#tplPick').value);
+  if (t?.channel === 'doc') $('#tplPrevSubject').textContent = '';
   if (t?.channel === 'sms') {   // 1 text = 160 characters (70 if it contains emoji etc.)
     const len = $('#tplPrevBody').textContent.length, per = /[^\x00-\x7F’–]/.test($('#tplPrevBody').textContent) ? 70 : 160;
     $('#tplPrevSubject').textContent = `Text message · ${len} characters · ${Math.ceil(len / per) || 1} text${len > per ? 's' : ''} (with example details)`;
@@ -936,6 +941,7 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   if (tab === 'completed') { $('#listArea').classList.add('hidden'); return loadCompleted(); }
   if (tab === 'prices') { $('#listArea').classList.add('hidden'); return loadPrices(); }
   if (tab === 'settings') { $('#listArea').classList.add('hidden'); return loadCompany(); }
+  if (tab === 'docs') { $('#tab-templates').classList.remove('hidden'); $('#listArea').classList.add('hidden'); return loadTemplates(); }
   if (tab === 'templates') { $('#listArea').classList.add('hidden'); return loadTemplates(); }
   if (tab === 'messages') { $('#listArea').classList.add('hidden'); return loadMessages(); }
   if (['due', 'book', 'scheduled'].includes(tab)) { $('#listArea').classList.add('hidden'); return openSchedule(); }

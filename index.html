@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
-<link rel="stylesheet" href="css/app.css?v=2611241228">
+<link rel="stylesheet" href="css/app.css?v=2611241229">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611241228"></script>
+<script src="config.js?v=2611241229"></script>
 </head>
 <body>
 <h1>AlarmRun – Office</h1>
@@ -50,7 +50,8 @@
       <button data-tab="settings">Settings</button>
       <button data-tab="inspectors">Inspectors</button>
       <button data-tab="prices">Prices</button>
-      <button data-tab="templates">Templates</button>
+      <button data-tab="templates">Message templates</button>
+      <button data-tab="docs">Document wording</button>
     </div>
     <a href="tech.html" style="color:#cfd8e3;padding:8px 10px;margin-top:auto">📱 Inspector app</a>
     <button id="logout">Log out</button>
@@ -196,7 +197,7 @@
   </div>
 
   <div id="tab-templates" class="tab hidden">
-    <h2>Templates</h2>
+    <h2 id="tplTitle">Message templates</h2>
     <div class="bar"><select id="tplPick"></select> <button type="button" id="tplSave" class="primary">Save</button> <span id="tplInfo"></span></div>
     <p style="margin:6px 0;color:#555">Click a placeholder to insert it where your cursor is. It's swapped for the real details when the message is made.</p>
     <div id="tplChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
@@ -271,6 +272,6 @@
   </main>
 </section>
 
-<script src="js/app.js?v=2611241228"></script>
+<script src="js/app.js?v=2611241229"></script>
 </body>
 </html>

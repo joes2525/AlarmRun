@@ -119,6 +119,7 @@ def main():
         step('Templates page', lambda: tab('templates'))
         step('Insert placeholder', lambda: page.locator('#tplChips button').first.click())
         step('SMS template shows counter', lambda: (page.select_option('#tplPick', 't2'), None if 'characters' in page.inner_text('#tplPrevSubject') else errors.append('SMS counter missing')))
+        step('Document wording page', lambda: (tab('docs'), None if page.locator('#tab-templates:not(.hidden)').count() == 1 and 'Document wording' in page.inner_text('#tplTitle') else errors.append('Docs page not shown')))
         step('Settings page', lambda: tab('settings'))
         step('Prices page', lambda: (tab('prices'), page.wait_for_selector('#pxLists input[data-f="price"]', timeout=2000)))
         step('Edit a price and save', lambda: (page.fill('#pxLists input[data-f="price"]', '90'), page.click('#pxSave')))
