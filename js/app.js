@@ -167,10 +167,11 @@ async function openSchedule() {
   if (!weekStart) weekStart = planWeek(14);
   if (!inspectors.length) {
     const [{ data: ins }, { data: areas }] = await Promise.all([
-      sb.from('inspectors').select('id,name,daily_capacity').eq('active', true).order('name'),
+      sb.from('inspectors').select('id,name,daily_capacity,availability').eq('active', true).order('name'),
       sb.from('suburb_areas').select('suburb,area')]);
     inspectors = ins || [];
     (areas || []).forEach(a => areaOf[a.suburb] = a.area);
+    drawInsFilter();
   }
   if (tab === 'due') loadDue(); else { if (tab === 'book') renderReady(); dayTicked.clear(); loadWeek(); }
 }
@@ -324,7 +325,7 @@ async function orderDay(insId, day) {
 
 // selected board cell (the From day on Scheduled)
 const pick = { ins: '', day: '' };
-const onBoard = (ins, day) => weekJobs.filter(j => j.ins === ins && j.day === day).length;   // jobs already on that day
+const onBoard = (ins, day) => [...weekJobs, ...week2Jobs].filter(j => j.ins === ins && j.day === day).length;   // jobs already on that day
 
 $('#dueFilter').onsubmit = e => { e.preventDefault(); loadDue(); };
 $('#dueFilter').group.onchange = loadDue;
@@ -354,7 +355,24 @@ async function bookTicked() {
 }
 
 // Week board: inspectors down, days across; each cell = total + areas (count)
-let weekJobs = [];   // cached jobs for the visible week
+// ---- availability: fortnightly pattern, Week 1 = week starting Mon 5 Jan 2026 ----
+const FORTNIGHT_START = new Date('2026-01-05T00:00');
+const fortnightIndex = d => { const dt = new Date(d + 'T00:00'), days = Math.round((dt - FORTNIGHT_START) / 864e5);
+  return (((days % 14) + 14) % 14); };   // 0..13 → Week 1 Mon .. Week 2 Sun
+const isAvailable = (ins, d) => { const a = ins?.availability; return Array.isArray(a) ? a[fortnightIndex(d)] !== false : ![5, 6].includes(fortnightIndex(d) % 7); };
+// ---- which inspectors show on the boards ----
+let hiddenIns = new Set(); try { hiddenIns = new Set(JSON.parse(localStorage.getItem('hiddenIns') || '[]')); } catch {}
+const shownInspectors = () => inspectors.filter(i => !hiddenIns.has(i.id));
+function drawInsFilter() {
+  $('#insFilter').innerHTML = inspectors.map(i => `<label><input type="checkbox" value="${i.id}"${hiddenIns.has(i.id) ? '' : ' checked'}> ${esc(i.name)}</label>`).join('');
+}
+$('#insFilter').onchange = e => {
+  e.target.checked ? hiddenIns.delete(e.target.value) : hiddenIns.add(e.target.value);
+  try { localStorage.setItem('hiddenIns', JSON.stringify([...hiddenIns])); } catch {}
+  drawWeek();
+};
+
+let weekJobs = [], week2Jobs = [];   // cached jobs for the visible week(s)
 const daysFrom = start => [...Array(7)].map((_, i) => { const d = new Date(start + 'T00:00'); d.setDate(d.getDate() + i); return iso(d); });
 const weekDays = () => daysFrom(weekStart);
 async function fetchWeek(start) {
@@ -365,9 +383,11 @@ async function fetchWeek(start) {
   return data.map(j => ({ id: j.id, ins: j.inspector_id, day: j.scheduled_start.slice(0,10),
     area: areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || 'No area', agent: j.properties?.clients?.name || 'No agent' }));
 }
+const nextWeek = () => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + 7); return iso(d); };
 async function loadWeek() {
-  const jobs = await fetchWeek(weekStart); if (!jobs) return;
-  weekJobs = jobs; drawWeek(); openDay(); loadAlerts();
+  const [jobs, jobs2] = await Promise.all([fetchWeek(weekStart), tab === 'scheduled' ? fetchWeek(nextWeek()) : []]);
+  if (!jobs) return;
+  weekJobs = jobs; week2Jobs = jobs2 || []; drawWeek(); openDay(); loadAlerts();
 }
 // Draw any board: table element, week start, jobs, selected inspector/day
 function drawBoard(el, start, jobs, selIns, selDay, toIns, toDay) {
@@ -379,9 +399,10 @@ function drawBoard(el, start, jobs, selIns, selDay, toIns, toDay) {
   }
   const dname = d => new Date(d + 'T00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
   el.innerHTML = `<tr><th>Inspector</th>${days.map(d => `<th>${dname(d)}</th>`).join('')}</tr>` +
-    inspectors.map(i => `<tr><th>${esc(i.name)}</th>${days.map(d => {
+    shownInspectors().map(i => `<tr><th>${esc(i.name)}</th>${days.map(d => {
       const c = cell[i.id + '|' + d], over = c && c.total > i.daily_capacity;
-      const sel = selIns === i.id && selDay === d ? ' class="sel"' : toIns === i.id && toDay === d ? ' class="to"' : '';
+      const st = selIns === i.id && selDay === d ? 'sel' : toIns === i.id && toDay === d ? 'to' : isAvailable(i, d) ? 'avail' : 'unavail';
+      const sel = ` class="${st}" title="${isAvailable(i, d) ? 'Available' : 'Not available'}"`;
       return `<td data-ins="${i.id}" data-day="${d}"${sel}>${c ? `<div class="tot ${over ? 'over' : ''}">${c.total}/${i.daily_capacity}</div>` +
         Object.entries(c.areas).sort((x, y) => y[1].n - x[1].n).map(([a, v]) => `${esc(a)} (${v.n})` +
           Object.entries(v.agents).sort((x, y) => y[1] - x[1]).map(([g, k]) => `<br><i style="color:#555">&nbsp;&nbsp;${esc(g)} (${k})</i>`).join('')).join('<br>') : ''}</td>`;
@@ -390,6 +411,9 @@ function drawBoard(el, start, jobs, selIns, selDay, toIns, toDay) {
 function drawWeek() {
   $('#wkLabel').textContent = ` Week of ${weekStart} `;
   document.querySelectorAll('.fromLbl').forEach(x => x.textContent = tab === 'scheduled' ? 'From – ' : '');
+  const two = tab === 'scheduled';
+  $('#week2Wrap').hidden = !two;
+  if (two) { $('#wk2Label').textContent = `Following week – ${nextWeek()}`; drawBoard($('#week2'), nextWeek(), week2Jobs, pick.ins, pick.day, to.ins, to.day); }
   drawBoard($('#week'), weekStart, weekJobs, pick.ins, pick.day, tab === 'scheduled' ? to.ins : null, to.day);
   if (tab === 'scheduled') showToPick();
 }
@@ -402,7 +426,7 @@ function showToPick() {
   $('#toPick').textContent = ins ? `To: ${ins.name}, ${new Date(to.day + 'T00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}` : 'To: click another day on the board';
 }
 
-$('#week').onclick = e => {
+const boardClick = e => {
   const td = e.target.closest('td[data-day]'); if (!td) return;
   const isFrom = pick.ins === td.dataset.ins && pick.day === td.dataset.day;
   if (tab === 'scheduled' && pick.ins && !isFrom) { to.ins = td.dataset.ins; to.day = td.dataset.day; return drawWeek(); }
@@ -415,6 +439,7 @@ $('#doBook').onclick = async () => {
   const ins = inspectors.find(i => i.id === pick.ins);
   if (!ticked.ready.size) return msg('Tick some on the Ready to book list first');
   if (!ins) return msg('Click an inspector\'s day on the week board first');
+  if (!isAvailable(ins, pick.day) && !confirm(`${ins.name} isn't available on ${pick.day}. Book anyway?`)) return;
   const total = onBoard(ins.id, pick.day) + ticked.ready.size;
   if (total > ins.daily_capacity && !confirm(`That makes ${total}/${ins.daily_capacity} for ${ins.name} – over capacity. Book anyway?`)) return;
   bookTicked();
@@ -510,6 +535,7 @@ $('#unbookDay').onclick = async () => {
 // Weeks run Mon–Sun, but planning rolls over on Saturday: "this week" = the Monday-week containing today + 2 days
 const planWeek = offset => { const d = new Date(); d.setDate(d.getDate() + 2); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + offset); return iso(d); };
 document.querySelectorAll('[data-wk]').forEach(b => b.onclick = () => { weekStart = planWeek(+b.dataset.wk); drawWeek(); loadWeek(); });
+$('#week').onclick = boardClick; $('#week2').onclick = boardClick;
 const shiftWeek = n => { const d = new Date(weekStart + 'T00:00'); d.setDate(d.getDate() + n); weekStart = iso(d); drawWeek(); loadWeek(); };
 $('#wkPrev').onclick = () => shiftWeek(-7);
 $('#wkNext').onclick = () => shiftWeek(7);
@@ -741,6 +767,29 @@ $('#doneLists').onclick = e => {
   }
 };
 
+// ---------- Inspector availability (Admin → Inspectors) ----------
+let availIns = [];
+async function loadAvail() {
+  const { data, error } = await sb.from('inspectors').select('id,name,availability').eq('active', true).order('name');
+  if (error) return msg(error.message);
+  availIns = data;
+  const dn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], cur = fortnightIndex(iso(new Date())) < 7 ? 1 : 2;
+  $('#availNow').textContent = `This week is Week ${cur}, next week is Week ${cur === 1 ? 2 : 1}.`;
+  $('#availGrid').innerHTML = `<tr><th></th><th colspan="7">Week 1</th><th colspan="7">Week 2</th></tr><tr><th>Inspector</th>${[...dn, ...dn].map(d => `<th>${d}</th>`).join('')}</tr>` +
+    data.map(i => `<tr><th>${esc(i.name)}</th>${[...Array(14)].map((_, k) => { const on = i.availability?.[k] !== false && !(i.availability == null && k % 7 > 4);
+      return `<td class="${on ? 'on' : 'off'}" data-ins="${i.id}" data-k="${k}">${on ? '✓' : '✗'}</td>`; }).join('')}</tr>`).join('');
+}
+$('#availGrid').onclick = async e => {
+  const td = e.target.closest('td[data-k]'); if (!td) return;
+  const ins = availIns.find(i => i.id === td.dataset.ins);
+  const a = Array.isArray(ins.availability) ? [...ins.availability] : [...Array(14)].map((_, k) => k % 7 < 5);
+  a[+td.dataset.k] = !a[+td.dataset.k]; ins.availability = a;
+  td.className = a[+td.dataset.k] ? 'on' : 'off'; td.textContent = a[+td.dataset.k] ? '✓' : '✗';   // show straight away
+  const { error } = await sb.from('inspectors').update({ availability: a }).eq('id', ins.id);
+  if (error) { msg(error.message); return loadAvail(); }
+  const b = inspectors.find(i => i.id === ins.id); if (b) b.availability = a;   // boards pick it up too
+};
+
 // ---------- Home ----------
 async function loadHome() {
   const today = iso(new Date()), in14 = addDays(14), in30 = addDays(30), ago30 = addDays(-30);
@@ -874,6 +923,7 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   $('#toArea').classList.toggle('hidden', tab !== 'scheduled');
   if (tab === 'scheduled') { $('#schedSide').append($('#toArea'), $('#dayView')); }
   else { $('#week').after($('#dayView')); }
+  if (tab === 'inspectors') loadAvail();
   if (tab === 'home') { $('#listArea').classList.add('hidden'); return loadHome(); }
   if (tab === 'completed') { $('#listArea').classList.add('hidden'); return loadCompleted(); }
   if (tab === 'prices') { $('#listArea').classList.add('hidden'); return loadPrices(); }

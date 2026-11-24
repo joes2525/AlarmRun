@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
-<link rel="stylesheet" href="css/app.css?v=2611241205">
+<link rel="stylesheet" href="css/app.css?v=2611241211">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611241205"></script>
+<script src="config.js?v=2611241211"></script>
 </head>
 <body>
 <h1>AlarmRun – Office</h1>
@@ -122,6 +122,9 @@
       <input name="daily_capacity" type="number" placeholder="Jobs per day" value="18">
       <button>Add inspector</button>
     </form>
+    <h3>Availability <small style="font-weight:normal;color:#555">– click a day to switch between available (green) and not available (red). Repeats every two weeks.</small></h3>
+    <p id="availNow" style="margin:0 0 6px;color:#555"></p>
+    <table id="availGrid" class="grp avail"></table>
   </div>
 
   <div id="tab-home" class="tab hidden">
@@ -235,8 +238,10 @@
   <div id="weekArea" class="hidden">
     <h3><span class="fromLbl"></span>Week board <small style="font-weight:normal;color:#555">(click a day to select it)</small></h3>
     <div class="bar"><button type="button" id="wkPrev">◀</button><b id="wkLabel"></b><button type="button" id="wkNext">▶</button>
-      <button type="button" data-wk="0">This week</button><button type="button" data-wk="7">Next week</button><button type="button" data-wk="14">The week after that</button></div>
+      <button type="button" data-wk="0">This week</button><button type="button" data-wk="7">Next week</button><button type="button" data-wk="14">The week after that</button>
+      <details class="insFilter"><summary>Inspectors ▾</summary><div id="insFilter"></div></details></div>
     <table id="week" class="week"></table>
+    <div id="week2Wrap" hidden><h4 id="wk2Label" style="margin:12px 0 4px"></h4><table id="week2" class="week"></table></div>
     <div id="dayView"></div>
   </div>
 
@@ -266,6 +271,6 @@
   </main>
 </section>
 
-<script src="js/app.js?v=2611241205"></script>
+<script src="js/app.js?v=2611241211"></script>
 </body>
 </html>

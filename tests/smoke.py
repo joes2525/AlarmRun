@@ -14,7 +14,7 @@ FAKE = r"""
 window.__DATA = {
   memberships: [{ company_id: 'c1', role: 'owner', companies: { name: 'Test Co' } }],
   companies: [{ name: 'Test Co', sender_name: 'Test Co', sender_code: 'test', reply_to_email: 't@x.com' }],
-  inspectors: [{ id: 'i1', name: 'Liam', daily_capacity: 18 }, { id: 'i2', name: 'Grant', daily_capacity: 18 }],
+  inspectors: [{ id: 'i1', name: 'Liam', daily_capacity: 18, availability: [true,true,true,true,true,false,false,true,true,true,true,true,false,false] }, { id: 'i2', name: 'Grant', daily_capacity: 18 }],
   suburb_areas: [{ suburb: 'COOMERA', area: 'Coomera Area' }],
   schedule_queue: [
     { reason: 'Annual', property_id: 'p1', job_id: null, address_line: '1 Test St', suburb: 'COOMERA', postcode: '4209', agency: 'Evolve', area: 'Coomera Area', last_done: '2025-01-01', due_date: '2026-01-01', notes: null },
@@ -102,6 +102,10 @@ def main():
         step('Scheduled page loads', lambda: tab('scheduled'))
         step('Pick From day', lambda: page.locator('#week td[data-day]').nth(1).click())
         step('Pick To day', lambda: page.locator('#week td[data-day]').nth(3).click())
+        step('Second week board shown', lambda: None if page.locator('#week2 td[data-day]').count() > 0 else errors.append('Week 2 board missing'))
+        step('Availability colours', lambda: None if page.locator('#week td.unavail').count() > 0 and page.locator('#week td.avail').count() > 0 else errors.append('Availability colours missing'))
+        step('Hide an inspector', lambda: (page.click('.insFilter summary'), page.locator('#insFilter input').nth(1).uncheck(),
+             None if page.locator('#week tr').count() == 2 else errors.append('Inspector filter did not hide a row'), page.locator('#insFilter input').nth(1).check(), page.click('.insFilter summary')))
         step('Move', lambda: page.click('#doMove'))
         step('Move saved', lambda: None if page.evaluate("__CALLS.filter(c => c[0]==='jobs' && c[1]==='update').length >= 2") else errors.append('Move: no update sent'))
         step('Completed page', lambda: (tab('completed'), page.wait_for_selector('#doneLists details', timeout=2000)))
@@ -120,6 +124,8 @@ def main():
         step('Edit a price and save', lambda: (page.fill('#pxLists input[data-f="price"]', '90'), page.click('#pxSave')))
         for t in ['clients', 'properties', 'tenants', 'jobs', 'certificates', 'invoices', 'inspectors']:
             step(f'{t} list', lambda t=t: tab(t))
+        step('Availability grid toggles', lambda: (page.wait_for_selector('#availGrid td[data-k]', timeout=2000), page.locator('#availGrid td[data-k]').first.click(),
+             None if page.locator('#availGrid td.off').count() >= 5 else errors.append('Availability toggle failed')))
         # ---- certificate preview ----
         c = b.new_page(viewport={'width': 900, 'height': 1300})
         c.on('pageerror', lambda e: errors.append(f'cert pageerror: {e}'))

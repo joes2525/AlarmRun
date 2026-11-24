@@ -62,3 +62,11 @@ button.appr.done{background:#1e8e3e}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 aside .submenu{display:flex;flex-direction:column;gap:2px;margin-left:10px;border-left:2px solid #323f4b;padding-left:6px}
 aside .submenu button{font-size:14px}
+table.week td.avail{background:#f0faf2} table.week td.unavail{background:#fdf0f0}
+table.week td.sel{background:#cfe2ff!important} table.week td.to{background:#ffd6d6!important}
+.insFilter{display:inline-block;position:relative;margin-left:8px}
+.insFilter summary{cursor:pointer;padding:4px 8px;border:1px solid #ccc;border-radius:4px;background:#fff;list-style:none}
+.insFilter>div{position:absolute;z-index:5;background:#fff;border:1px solid #ccc;border-radius:6px;padding:8px;min-width:180px;box-shadow:0 2px 8px #0002}
+.insFilter label{display:block;padding:3px 0}
+table.avail td{text-align:center;cursor:pointer;min-width:34px;user-select:none}
+table.avail td.on{background:#d6f5dc;color:#1e8e3e} table.avail td.off{background:#fbdada;color:#b00}
