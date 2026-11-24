@@ -10,7 +10,10 @@ Deno.serve(async (req) => {
   // only signed-in users of the app (or the scheduler using the service key) may run this
   if (!req.headers.get("Authorization")) return new Response("Unauthorized", { status: 401 });
 
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  // Supabase provides its admin key to functions automatically (name differs between old and new key systems)
+  const adminKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SECRET_KEY");
+  if (!adminKey) return Response.json({ error: "No Supabase admin key available to the function" }, { status: 500 });
+  const db = createClient(Deno.env.get("SUPABASE_URL")!, adminKey);
   const key = Deno.env.get("RESEND_API_KEY");
   if (!key) return Response.json({ error: "RESEND_API_KEY secret is not set" }, { status: 500 });
 
