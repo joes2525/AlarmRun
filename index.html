@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
-<link rel="stylesheet" href="css/app.css?v=2611231753">
+<link rel="stylesheet" href="css/app.css?v=2611241011">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611231753"></script>
+<script src="config.js?v=2611241011"></script>
 </head>
 <body>
 <h1>AlarmRun – Office</h1>
@@ -33,6 +33,7 @@
 <section id="app" class="hidden">
   <aside>
     <b>AlarmRun</b><div class="who" id="who"></div>
+    <button data-tab="home">Home</button>
     <button data-tab="due">Due</button>
     <button data-tab="book">Book</button>
     <button data-tab="scheduled">Scheduled</button>
@@ -118,6 +119,13 @@
       <input name="daily_capacity" type="number" placeholder="Jobs per day" value="18">
       <button>Add inspector</button>
     </form>
+  </div>
+
+  <div id="tab-home" class="tab hidden">
+    <h2 id="homeHello">Home</h2>
+    <div id="homeCards" class="cards"></div>
+    <h3>Today's runs</h3>
+    <div id="homeToday"></div>
   </div>
 
   <div id="tab-due" class="tab hidden">
@@ -249,6 +257,6 @@
   </main>
 </section>
 
-<script src="js/app.js?v=2611231753"></script>
+<script src="js/app.js?v=2611241011"></script>
 </body>
 </html>

@@ -42,7 +42,7 @@ async function start() {
   document.title = `${data[0].companies?.name || 'AlarmRun'} – Office`;
   show('app');
   loadClientPick();
-  document.querySelector('aside button[data-tab="due"]').click();
+  document.querySelector('aside button[data-tab="home"]').click();
 }
 
 async function loadList() {
@@ -682,6 +682,43 @@ $('#doneLists').onclick = e => {
   }
 };
 
+// ---------- Home ----------
+async function loadHome() {
+  const today = iso(new Date()), in14 = addDays(14), in30 = addDays(30), ago30 = addDays(-30);
+  const cnt = q => q.then(r => r.count ?? 0);
+  const head = t => sb.from(t).select('*', { count: 'exact', head: true });
+  const [due, overdue, breakdowns, unassigned, toApprove, queued, alerts, leases, todayJobs, ins] = await Promise.all([
+    cnt(head('schedule_queue').lte('due_date', in14)),
+    cnt(head('schedule_queue').lt('due_date', today).eq('reason', 'Annual')),
+    cnt(head('schedule_queue').eq('reason', 'Breakdown')),
+    cnt(head('jobs').is('inspector_id', null).in('status', ['booked'])),
+    cnt(head('completed_summary').is('approved_at', null).gte('done_at', ago30 + 'T00:00')),
+    cnt(head('messages').eq('status', 'queued')),
+    cnt(head('notice_alerts').not('problem', 'is', null)),
+    cnt(head('tenancies').gte('lease_end', today).lte('lease_end', in30).is('vacate_date', null)),
+    sb.from('jobs').select('inspector_id,status').gte('scheduled_start', today + 'T00:00').lte('scheduled_start', today + 'T23:59')
+      .in('status', ['booked', 'in_progress', 'completed', 'no_access']).then(r => r.data || []),
+    sb.from('inspectors').select('id,name,daily_capacity').eq('active', true).order('name').then(r => r.data || [])]);
+  const ready = unassigned + staged.size;
+  const h = new Date().getHours();
+  $('#homeHello').textContent = `${h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'}`;
+  const card = (tabName, n, label, sub = '', warn = false) =>
+    `<a href="#" data-go="${tabName}"><div class="n ${warn && n ? 'bad' : ''}">${n}</div><div class="l">${label}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</a>`;
+  $('#homeCards').innerHTML = [
+    card('due', due, 'Due in the next 2 weeks', `${overdue ? `<span class="bad">${overdue} overdue</span> · ` : ''}${breakdowns} breakdown${breakdowns === 1 ? '' : 's'}`),
+    card('book', ready, 'Ready to book', 'waiting for an inspector and day'),
+    card('completed', toApprove, 'Waiting for approval', 'completed in the last 30 days'),
+    card('messages', queued, 'Messages queued', alerts ? `<span class="bad">⚠ ${alerts} entry notice problem${alerts === 1 ? '' : 's'}</span>` : 'no problems'),
+    card('tenants', leases, 'Leases ending soon', 'in the next 30 days')].join('');
+  const rows = ins.map(i => {
+    const js = todayJobs.filter(j => j.inspector_id === i.id); if (!js.length) return '';
+    const done = js.filter(j => ['completed', 'no_access'].includes(j.status)).length;
+    return `<p><b style="display:inline-block;width:110px">${esc(i.name)}</b><span class="prog"><i style="width:${Math.round(done / js.length * 100)}%"></i></span>${done} of ${js.length} done</p>`;
+  }).join('');
+  $('#homeToday').innerHTML = rows || '<p style="color:#555">No jobs booked for today.</p>';
+}
+$('#homeCards').onclick = e => { const a = e.target.closest('[data-go]'); if (!a) return; e.preventDefault(); document.querySelector(`aside button[data-tab="${a.dataset.go}"]`).click(); };
+
 // Events
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -733,6 +770,7 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   $('#toArea').classList.toggle('hidden', tab !== 'scheduled');
   if (tab === 'scheduled') { $('#schedSide').append($('#toArea'), $('#dayView')); }
   else { $('#week').after($('#dayView')); }
+  if (tab === 'home') { $('#listArea').classList.add('hidden'); return loadHome(); }
   if (tab === 'completed') { $('#listArea').classList.add('hidden'); return loadCompleted(); }
   if (tab === 'prices') { $('#listArea').classList.add('hidden'); return loadPrices(); }
   if (tab === 'settings') { $('#listArea').classList.add('hidden'); return loadCompany(); }

@@ -81,6 +81,8 @@ def main():
             print(('FAIL ' if len(errors) > before else 'ok   ') + name)
 
         tab = lambda t: page.click(f'aside button[data-tab="{t}"]')
+        step('Home page loads', lambda: page.wait_for_selector('#homeCards a', timeout=3000))
+        step('Home card opens Due', lambda: page.click('#homeCards [data-go="due"]'))
         step('Due page loads', lambda: tab('due'))
         step('Tick a due group', lambda: page.locator('#dueList input[data-group]').first.check())
         step('Move to Book', lambda: page.click('#toBook'))

@@ -49,3 +49,9 @@ input,select{padding:5px}
 button.appr{background:#1f6feb;color:#fff;border:0;border-radius:5px;padding:5px 10px;cursor:pointer}
 button.appr.done{background:#1e8e3e}
 .doneGrp summary button.appr{margin-left:10px;font-size:13px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin:10px 0 20px}
+.cards a{display:block;background:#f4f6f8;border-radius:8px;padding:14px;text-decoration:none;color:#1f2933;border:1px solid #e4e7eb}
+.cards a:hover{border-color:#1f6feb}
+.cards .n{font-size:30px;font-weight:700}.cards .l{font-size:14px;color:#52606d}.cards .sub{font-size:13px;margin-top:4px}
+.prog{background:#e4e7eb;border-radius:6px;height:10px;overflow:hidden;width:220px;display:inline-block;vertical-align:middle;margin:0 8px}
+.prog i{display:block;height:100%;background:#1e8e3e}
