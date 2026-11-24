@@ -690,9 +690,10 @@ async function loadPrices() {
 }
 function drawPrices() {
   $('#pxLists').innerHTML = PX.map(([k, title, priced]) => `<div><h3 style="margin-top:0">${title}</h3><table class="grp">
-    <tr><th>Name</th>${priced ? '<th>Price</th>' : ''}<th>Show</th></tr>` +
+    <tr><th>Name</th>${priced ? '<th>Price inc GST</th><th>GST</th><th>Ex GST</th>' : ''}<th>Show</th></tr>` +
     pxRows.map((r, i) => r.kind !== k ? '' : `<tr class="prow"><td><input type="text" data-px="${i}" data-f="name" value="${esc(r.name)}"></td>
-      ${priced ? `<td>$<input type="number" step="0.01" min="0" data-px="${i}" data-f="price" value="${r.price ?? 0}"></td>` : ''}
+      ${priced ? `<td>$<input type="number" step="0.01" min="0" data-px="${i}" data-f="price" value="${r.price ?? 0}"></td>
+        <td class="gst" data-gst="${i}">${money(Number(r.price || 0) / 11)}</td><td class="gst" data-ex="${i}">${money(Number(r.price || 0) / 1.1)}</td>` : ''}
       <td><input type="checkbox" data-px="${i}" data-f="active"${r.active ? ' checked' : ''}></td></tr>`).join('') +
     `</table><button type="button" data-pxadd="${k}">+ Add</button></div>`).join('');
 }
@@ -700,6 +701,10 @@ $('#pxLists').oninput = e => {
   const r = pxRows[+e.target.dataset.px]; if (!r) return;
   const f = e.target.dataset.f; r[f] = f === 'active' ? e.target.checked : f === 'price' ? Number(e.target.value) : e.target.value;
   r.dirty = true; $('#pxInfo').textContent = 'Unsaved changes';
+  if (f === 'price') {   // prices include GST: GST = 1/11 of the price
+    $(`[data-gst="${e.target.dataset.px}"]`).textContent = money(r.price / 11);
+    $(`[data-ex="${e.target.dataset.px}"]`).textContent = money(r.price / 1.1);
+  }
 };
 $('#pxLists').onclick = e => {
   const k = e.target.dataset.pxadd; if (!k) return;

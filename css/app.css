@@ -71,3 +71,4 @@ table.week td.sel{background:#cfe2ff!important} table.week td.to{background:#ffd
 table.avail td{text-align:center;cursor:pointer;min-width:34px;user-select:none}
 table.avail td.on{background:#d6f5dc;color:#1e8e3e} table.avail td.off{background:#fbdada;color:#b00}
 aside .submenu[hidden]{display:none}
+.pxgrid td.gst{color:#52606d;width:90px!important}
