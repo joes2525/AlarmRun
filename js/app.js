@@ -549,7 +549,6 @@ $('#wkPrev').onclick = () => shiftWeek(-7);
 $('#wkNext').onclick = () => shiftWeek(7);
 
 // ---------- Messages (outbox) ----------
-const msgTicked = new Set();
 async function loadAlerts() {
   const { data, error } = await sb.from('notice_alerts').select('job_id,visit,inspector,address_line,suburb,problem').not('problem', 'is', null).order('visit');
   if (error) return msg(error.message);
@@ -561,63 +560,75 @@ async function loadAlerts() {
   const btn = document.querySelector('aside button[data-tab="messages"]');
   btn.textContent = data.length ? `Messages ⚠ ${data.length}` : 'Messages';
 }
+const CHANNELS = { email: 'Emails', sms: 'Texts', mail: 'Mail' };
 async function loadMessages() {
   loadAlerts();
   let q = sb.from('messages').select('id,kind,channel,to_name,to_address,subject,body,for_date,send_after,status,error,properties(address_line,suburb)')
-    .order('for_date', { nullsFirst: false }).order('send_after').limit(500);
+    .order('for_date', { nullsFirst: false }).order('send_after').limit(1000);
   if ($('#msgStatus').value) q = q.eq('status', $('#msgStatus').value);
-  if ($('#msgChannel').value) q = q.eq('channel', $('#msgChannel').value);
   const { data, error } = await q;
   if (error) return msg(error.message);
-  msgTicked.clear();
   const kind = { entry_notice: 'Entry notice', entry_notice_changed: 'Entry notice – date changed', reminder: 'Reminder' };
-  $('#msgInfo').textContent = `${data.length} message${data.length === 1 ? '' : 's'}`;
-  const type = { email: '✉ Email', sms: '💬 Text', mail: '📮 Mail' };
-  $('#msgList').innerHTML = '<tr><th><input type="checkbox" id="msgAll"></th><th>Send (Qld time)</th><th>Type</th><th>To / subject</th><th>Message</th></tr>' +
-    data.map((m, i) => (m.for_date !== data[i - 1]?.for_date ? `<tr class="g1"><td></td><td colspan="4">Inspection ${m.for_date ? new Date(m.for_date + 'T00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' }) : '– no date'} — ${data.filter(x => x.for_date === m.for_date).length}</td></tr>` : '') +
-      `<tr class="prow"><td><input type="checkbox" class="mpick" value="${m.id}" data-ch="${m.channel}"></td>
-      <td>${m.channel === 'mail' ? (m.status === 'sent' ? 'Posted' : 'Print & post now') : new Date(m.send_after).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td>
-      <td>${type[m.channel] || esc(m.channel)}</td>
-      <td style="white-space:normal;width:22%"><b>${esc(m.to_name)}</b> <small>${esc(m.to_address || '— none')}</small><br>
-        ${esc(m.properties?.address_line)}, ${esc(m.properties?.suburb)} – ${kind[m.kind] || esc(m.kind)}${m.error ? `<br><small class="bad">${esc(m.error)}</small>` : ''}
-        ${m.channel === 'mail' && m.status === 'queued' ? `<br><a href="letter.html?ids=${m.id}" target="_blank">Print letter</a> · <a href="#" data-posted="${m.id}">Mark posted</a>` : ''}</td>
-      <td style="white-space:pre-wrap;font-size:13px">${esc(m.body)}</td></tr>`).join('');
+  const del = $('#msgStatus').value === 'cancelled';
+  document.querySelectorAll('#msgSections [data-act="del"]').forEach(b => { if (!b.disabled) b.textContent = del ? 'Restore' : 'Delete'; });
+  for (const ch in CHANNELS) {
+    const rows = data.filter(m => m.channel === ch);
+    $('#msgH-' + ch).textContent = `${{ email: '✉', sms: '💬', mail: '📮' }[ch]} ${CHANNELS[ch]} (${rows.length})`;
+    $('#msgList-' + ch).innerHTML = !rows.length ? '<tr><td style="color:#777">None</td></tr>' :
+      `<tr><th><input type="checkbox" class="mall"></th><th>${ch === 'mail' ? 'Status' : 'Send (Qld time)'}</th><th>To / subject</th><th>Message</th></tr>` +
+      rows.map((m, i) => (m.for_date !== rows[i - 1]?.for_date ? `<tr class="g1"><td></td><td colspan="3">Inspection ${m.for_date ? new Date(m.for_date + 'T00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' }) : '– no date'} — ${rows.filter(x => x.for_date === m.for_date).length}</td></tr>` : '') +
+        `<tr class="prow"><td><input type="checkbox" class="mpick" value="${m.id}"></td>
+        <td>${ch === 'mail' ? (m.status === 'sent' ? 'Posted' : 'Print & post now') : new Date(m.send_after).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td>
+        <td style="white-space:normal;width:22%"><b>${esc(m.to_name)}</b> <small>${esc(m.to_address || '— none')}</small><br>
+          ${esc(m.properties?.address_line)}, ${esc(m.properties?.suburb)} – ${kind[m.kind] || esc(m.kind)}${m.error ? `<br><small class="bad">${esc(m.error)}</small>` : ''}</td>
+        <td style="white-space:pre-wrap;font-size:13px">${esc(m.body)}</td></tr>`).join('');
+  }
 }
 $('#msgStatus').onchange = loadMessages;
-$('#msgChannel').onchange = loadMessages;
-$('#msgList').onchange = e => {
-  const boxes = e.target.id === 'msgAll' ? [...document.querySelectorAll('.mpick')] : e.target.classList.contains('mpick') ? [e.target] : [];
-  boxes.forEach(c => { c.checked = e.target.checked; c.checked ? msgTicked.add(c.value) : msgTicked.delete(c.value); });
+$('#msgSections').onchange = e => {
+  if (e.target.classList.contains('mall')) e.target.closest('table').querySelectorAll('.mpick').forEach(c => c.checked = e.target.checked);
 };
-const setMsgStatus = async (status, label) => {
-  if (!msgTicked.size) return msg('Tick some messages first');
-  const { error } = await sb.from('messages').update({ status, error: null }).in('id', [...msgTicked]);
-  msg(error ? error.message : `${label} ${msgTicked.size}`); loadMessages();
+// Button shows progress itself: "Sending…" → "Sent" for 3 seconds → back to its label
+async function busy(btn, doing, done, fn) {
+  const label = btn.textContent; btn.disabled = true; btn.textContent = doing;
+  let ok = false;
+  try { ok = await fn(); } catch (e) { msg(e.message); }
+  btn.textContent = ok ? done : 'Failed';
+  await loadMessages();
+  setTimeout(() => { btn.textContent = label; btn.disabled = false; }, 3000);
+}
+$('#msgSections').onclick = e => {
+  const btn = e.target.closest('button[data-act]'); if (!btn || btn.disabled) return;
+  const ch = btn.dataset.ch, act = btn.dataset.act;
+  const ids = [...document.querySelectorAll(`#msgList-${ch} .mpick:checked`)].map(c => c.value);
+  if (!ids.length) { const t = btn.textContent; btn.textContent = 'Tick some first'; setTimeout(() => btn.textContent = t, 2000); return; }
+  if (act === 'print') return open('letter.html?ids=' + ids.join(','), '_blank');
+  if (act === 'posted') return busy(btn, 'Saving…', 'Done', async () => {
+    const { error } = await sb.from('messages').update({ status: 'sent', sent_at: new Date().toISOString() }).in('id', ids);
+    if (error) msg(error.message); return !error;
+  });
+  if (act === 'del') {
+    const restore = btn.textContent === 'Restore';
+    if (!restore && !confirm(`Delete ${ids.length} ${CHANNELS[ch].toLowerCase()}? (They can be restored from the Deleted view.)`)) return;
+    return busy(btn, restore ? 'Restoring…' : 'Deleting…', restore ? 'Restored' : 'Deleted', async () => {
+      const { error } = await sb.from('messages').update({ status: restore ? 'queued' : 'cancelled', error: null }).in('id', ids);
+      if (error) msg(error.message); return !error;
+    });
+  }
+  if (act === 'send') return busy(btn, 'Sending…', 'Sent', async () => {
+    const { error } = await sb.from('messages').update({ send_after: new Date().toISOString(), status: 'queued', error: null }).in('id', ids);
+    if (error) { msg(error.message); return false; }
+    const { data, error: fnErr } = await sb.functions.invoke('Send-messages');   // function slug as created in Supabase (case-sensitive)
+    if (fnErr) {
+      let why = fnErr.message;
+      if (fnErr.context?.text) { try { const t = await fnErr.context.text(); why = (JSON.parse(t).error || t) + ` (status ${fnErr.context.status})`; } catch {} }
+      msg('Sending failed: ' + why); return false;
+    }
+    if (data.failed) msg(`${data.failed} failed – the reason is shown on the message (Problems view)`);
+    else msg('');
+    return !data.failed;
+  });
 };
-$('#msgNow').onclick = async () => {
-  if (!msgTicked.size) return msg('Tick some messages first');
-  const { error } = await sb.from('messages').update({ send_after: new Date().toISOString(), status: 'queued', error: null }).in('id', [...msgTicked]);
-  if (error) return msg(error.message);
-  msg('Sending…');
-  const { data, error: fnErr } = await sb.functions.invoke('Send-messages')   // function slug as created in Supabase (case-sensitive);   // texts and letters are skipped for now
-  let why = fnErr?.message;
-  if (fnErr?.context?.text) { try { const t = await fnErr.context.text(); why = (JSON.parse(t).error || t) + ` (status ${fnErr.context.status})`; } catch {} }
-  msg(fnErr ? 'Sending failed: ' + why : `Emails sent: ${data.sent}, failed: ${data.failed}` + (data.failed ? ' – see the message for the reason' : ''));
-  loadMessages();
-};
-$('#msgList').addEventListener('click', async e => {
-  const id = e.target.dataset.posted; if (!id) return;
-  e.preventDefault();
-  const { error } = await sb.from('messages').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', id);
-  msg(error ? error.message : 'Marked as posted'); loadMessages();
-});
-$('#msgPrint').onclick = () => {
-  const ids = [...document.querySelectorAll('.mpick:checked')].filter(c => c.dataset.ch === 'mail').map(c => c.value);
-  if (!ids.length) return msg('Tick some 📮 Mail messages first');
-  open('letter.html?ids=' + ids.join(','), '_blank');
-};
-$('#msgCancel').onclick = () => setMsgStatus('cancelled', 'Cancelled');
-$('#msgRequeue').onclick = () => setMsgStatus('queued', 'Re-queued');
 
 // ---------- Templates ----------
 const PLACEHOLDERS = ['Tenant greeting', 'Tenant names', 'Address', 'Suburb', 'Postcode', 'Visit date', 'Old visit date', 'Inspector', 'Company'];

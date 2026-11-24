@@ -25,7 +25,7 @@ window.__DATA = {
            certificates: [{ number: 'AASA-00001', compliant: true, issued_at: '%DAY%T05:00:00Z' }],
            alarm_checks: [{ action: 'Serviced', alarms: { location: 'Hallway', sensor_type: 'Photoelectric', power_source: 'hardwired', manufacture_date: '2021-03-01', expiry_date: '2031-03-01' } },
                           { action: 'Replaced', replace_reason: 'Broken', quote: 'Upgrade', photo_path: 'c1/j1/a.jpg', alarms: { location: 'Bedroom 1', sensor_type: 'Photoelectric', power_source: '10yr_lithium', manufacture_date: '2026-06-01', expiry_date: '2036-06-01' } }] }],
-  messages: [{ id: 'm2', company_id: 'c1', kind: 'entry_notice', channel: 'mail', to_name: 'Sam', to_address: '3 Test St, COOMERA QLD 4209', subject: 'Entry notice', body: 'Hi Sam', for_date: '%DAY%', send_after: '%DAY%T09:00:00Z', status: 'queued', properties: { address_line: '3 Test St', suburb: 'COOMERA' } },
+  messages: [{ id: 'm1', company_id: 'c1', kind: 'entry_notice', channel: 'email', to_name: 'Kim', to_address: 'a@b.c', subject: 'Entry notice', body: 'Hi Kim', for_date: '%DAY%', send_after: '%DAY%T09:00:00Z', status: 'queued', properties: { address_line: '4 Test St', suburb: 'COOMERA' } }, { id: 'm2', company_id: 'c1', kind: 'entry_notice', channel: 'mail', to_name: 'Sam', to_address: '3 Test St, COOMERA QLD 4209', subject: 'Entry notice', body: 'Hi Sam', for_date: '%DAY%', send_after: '%DAY%T09:00:00Z', status: 'queued', properties: { address_line: '3 Test St', suburb: 'COOMERA' } },
     { id: 'm1', kind: 'entry_notice', to_name: 'Sam', to_address: 's@x.com', subject: 'Entry notice', body: 'Hi {x}', for_date: '%DAY%', send_after: '%DAY%T09:00:00Z', status: 'queued', properties: { address_line: '3 Test St', suburb: 'COOMERA' } }],
   notice_alerts: [{ job_id: 'j1', visit: '%DAY%', inspector: 'Liam', address_line: '3 Test St', suburb: 'COOMERA', problem: 'No entry notice for this visit date' }],
   alarms: [{ id: 'a1', location: 'Hallway', storey: 1, sensor_type: 'photoelectric', power_source: 'hardwired', brand: 'Clipsal', expiry_date: '2030-01-01' },
@@ -116,8 +116,11 @@ def main():
         step('Approve saved', lambda: None if page.evaluate("__CALLS.some(c => c[0]==='jobs' && c[1]==='update')") else errors.append('Approve: no update sent'))
         step('Messages page', lambda: tab('messages'))
         step('Open Admin menu', lambda: page.click('#adminToggle'))
-        step('Mail row has print + posted', lambda: None if page.locator('#msgList [data-posted]').count() == 1 else errors.append('Mail actions missing'))
-        step('Mark posted', lambda: page.click('#msgList [data-posted]'))
+        step('Mail table has a row', lambda: None if page.locator('#msgList-mail .mpick').count() == 1 else errors.append('Mail table empty'))
+        step('Mark posted', lambda: (page.locator('#msgList-mail .mpick').check(), page.click('[data-act=posted]'), page.wait_for_timeout(300),
+             None if page.locator('[data-act=posted]').inner_text() == 'Done' else errors.append('Posted button did not show Done')))
+        step('Send email', lambda: (page.locator('#msgList-email .mpick').first.check(), page.click('[data-act=send][data-ch=email]'), page.wait_for_timeout(300),
+             None if page.locator('[data-act=send][data-ch=email]').inner_text() in ('Sending…', 'Sent') else errors.append('Send button text: ' + page.locator('[data-act=send][data-ch=email]').inner_text())))
         step('Templates page', lambda: tab('templates'))
         step('Insert placeholder', lambda: page.locator('#tplChips button').first.click())
         step('SMS template shows counter', lambda: (page.select_option('#tplPick', 't2'), None if 'characters' in page.inner_text('#tplPrevSubject') else errors.append('SMS counter missing')))

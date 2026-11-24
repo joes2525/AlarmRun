@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
-<link rel="stylesheet" href="css/app.css?v=2611241357">
+<link rel="stylesheet" href="css/app.css?v=2611241426">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611241357"></script>
+<script src="config.js?v=2611241426"></script>
 </head>
 <body>
 <h1>AlarmRun – Office</h1>
@@ -183,18 +183,20 @@
 
   <div id="tab-messages" class="tab hidden">
     <h2>Messages</h2>
-    <p style="margin:0;color:#555">Emails and texts go out in two batches a day, 7am and 7pm Queensland time. Letters (📮) need printing and posting – tick them and click Print, then Mark posted. <b>Nothing is sent yet</b> – no sending service is connected.</p>
-    <div class="bar">
-      <select id="msgStatus"><option value="queued">Queued</option><option value="failed">Problems</option><option value="sent">Sent</option><option value="cancelled">Cancelled</option><option value="">All</option></select>
-      <select id="msgChannel"><option value="">Emails & texts</option><option value="email">Emails</option><option value="sms">Texts</option><option value="mail">Mail</option></select>
-      <span id="msgInfo"></span>
-      <button type="button" id="msgNow" class="primary">Send now</button>
-      <button type="button" id="msgPrint">Print ticked letters</button>
-      <button type="button" id="msgCancel">Cancel ticked</button>
-      <button type="button" id="msgRequeue">Re-queue ticked</button>
-    </div>
+    <p style="margin:0;color:#555">Emails and texts go out automatically at 7am and 7pm Queensland time – or tick some and click Send to send them now. Letters need printing and posting.</p>
+    <div class="bar"><select id="msgStatus"><option value="queued">Queued</option><option value="failed">Problems</option><option value="sent">Sent</option><option value="cancelled">Deleted</option><option value="">All</option></select></div>
     <div id="alertBox"></div>
-    <table id="msgList" class="grp"></table>
+    <div id="msgSections">
+      <h3 id="msgH-email">✉ Emails</h3>
+      <div class="bar"><button type="button" class="primary" data-act="send" data-ch="email">Send</button> <button type="button" data-act="del" data-ch="email">Delete</button></div>
+      <table id="msgList-email" class="grp"></table>
+      <h3 id="msgH-sms">💬 Texts</h3>
+      <div class="bar"><button type="button" class="primary" data-act="send" data-ch="sms" disabled title="Text sending isn't connected yet">Send</button> <button type="button" data-act="del" data-ch="sms">Delete</button></div>
+      <table id="msgList-sms" class="grp"></table>
+      <h3 id="msgH-mail">📮 Mail</h3>
+      <div class="bar"><button type="button" class="primary" data-act="print" data-ch="mail">Print</button> <button type="button" data-act="posted" data-ch="mail">Mark posted</button> <button type="button" data-act="del" data-ch="mail">Delete</button></div>
+      <table id="msgList-mail" class="grp"></table>
+    </div>
   </div>
 
   <div id="tab-templates" class="tab hidden">
@@ -273,6 +275,6 @@
   </main>
 </section>
 
-<script src="js/app.js?v=2611241357"></script>
+<script src="js/app.js?v=2611241426"></script>
 </body>
 </html>
