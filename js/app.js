@@ -600,7 +600,9 @@ $('#msgNow').onclick = async () => {
   if (error) return msg(error.message);
   msg('Sending…');
   const { data, error: fnErr } = await sb.functions.invoke('Send-messages')   // function slug as created in Supabase (case-sensitive);   // texts and letters are skipped for now
-  msg(fnErr ? 'Sender not set up yet: ' + fnErr.message : `Emails sent: ${data.sent}, failed: ${data.failed}` + (data.failed ? ' – see the message for the reason' : ''));
+  let why = fnErr?.message;
+  if (fnErr?.context?.text) { try { const t = await fnErr.context.text(); why = (JSON.parse(t).error || t) + ` (status ${fnErr.context.status})`; } catch {} }
+  msg(fnErr ? 'Sending failed: ' + why : `Emails sent: ${data.sent}, failed: ${data.failed}` + (data.failed ? ' – see the message for the reason' : ''));
   loadMessages();
 };
 $('#msgList').addEventListener('click', async e => {
