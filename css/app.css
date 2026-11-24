@@ -55,3 +55,8 @@ button.appr.done{background:#1e8e3e}
 .cards .n{font-size:30px;font-weight:700}.cards .l{font-size:14px;color:#52606d}.cards .sub{font-size:13px;margin-top:4px}
 .prog{background:#e4e7eb;border-radius:6px;height:10px;overflow:hidden;width:220px;display:inline-block;vertical-align:middle;margin:0 8px}
 .prog i{display:block;height:100%;background:#1e8e3e}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px;margin-bottom:10px}
+.charts>div{background:#fff;border:1px solid #e4e7eb;border-radius:8px;padding:10px 12px}
+.charts h3{margin:0 0 6px;font-size:15px}
+.legend{font-size:12px;color:#52606d;display:flex;gap:14px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}

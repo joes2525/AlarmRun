@@ -36,6 +36,8 @@ window.__DATA = {
     { id: 'x7', kind: 'replace_reason', name: 'Under warranty', price: 0, active: true }],
   completed_summary: [{ id: 'j5', status: 'completed', outcome: 'compliant', done_at: '%DAY%T05:00:00Z', address_line: '5 Test St', suburb: 'COOMERA', agency: 'Evolve', inspector: 'Liam', compliant: true, certificate: 'C1', actions: 'Serviced ×4, Replaced (Broken) ×1', quotes: 'Upgrade – Hallway', has_invoice: true, has_quote: true, blind_cleats: 'Installed', blind_cleats_needed: 2 },
     { id: 'j6', status: 'no_access', done_at: '%DAY%T05:00:00Z', address_line: '6 Test St', suburb: 'COOMERA', agency: 'Evolve', inspector: 'Liam', comment: 'No one home', has_invoice: false, has_quote: false }],
+  home_due_weekly: [{ wk: '%MON%', due: 40 }],
+  home_jobs_weekly: [{ wk: '%MON%', completed: 60, no_access: 5, booked: 30 }],
   templates: [{ id: 't1', name: 'Entry notice', subject: 'Entry {Address}', body: 'Hi {Tenant greeting}' }],
 };
 window.__CALLS = [];
@@ -71,7 +73,7 @@ def main():
         page.on('dialog', lambda d: d.accept())
         page.route('**/supabase-js@2', lambda r: r.fulfill(body='', content_type='text/javascript'))
         page.route('**/config.js*', lambda r: r.fulfill(body="window.SUPABASE_URL='x';window.SUPABASE_KEY='y';", content_type='text/javascript'))
-        page.add_init_script(FAKE.replace('%DAY%', day(1)))
+        page.add_init_script(FAKE.replace('%DAY%', day(1)).replace('%MON%', day(0)))
         page.goto(url); page.wait_for_timeout(600)
 
         def step(name, fn):
@@ -82,6 +84,8 @@ def main():
 
         tab = lambda t: page.click(f'aside button[data-tab="{t}"]')
         step('Home page loads', lambda: page.wait_for_selector('#homeCards a', timeout=3000))
+        step('Home charts drawn', lambda: None if page.locator('#chartAhead rect').count() >= 2 and page.locator('#chartDone rect').count() >= 1 else errors.append('Home charts missing'))
+        page.screenshot(path='/tmp/home.png', full_page=True)
         step('Home card opens Due', lambda: page.click('#homeCards [data-go="due"]'))
         step('Due page loads', lambda: tab('due'))
         step('Tick a due group', lambda: page.locator('#dueList input[data-group]').first.check())

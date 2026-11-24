@@ -700,6 +700,7 @@ async function loadHome() {
       .in('status', ['booked', 'in_progress', 'completed', 'no_access']).then(r => r.data || []),
     sb.from('inspectors').select('id,name,daily_capacity').eq('active', true).order('name').then(r => r.data || [])]);
   const ready = unassigned + staged.size;
+  drawHomeCharts(ins);
   const h = new Date().getHours();
   $('#homeHello').textContent = `${h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'}`;
   const card = (tabName, n, label, sub = '', warn = false) =>
@@ -716,6 +717,47 @@ async function loadHome() {
     return `<p><b style="display:inline-block;width:110px">${esc(i.name)}</b><span class="prog"><i style="width:${Math.round(done / js.length * 100)}%"></i></span>${done} of ${js.length} done</p>`;
   }).join('');
   $('#homeToday').innerHTML = rows || '<p style="color:#555">No jobs booked for today.</p>';
+}
+// Small SVG bar charts – no library needed
+const C = { due: '#f2994a', booked: '#1f6feb', done: '#1e8e3e', noacc: '#e0b400', cap: '#52606d', grid: '#e4e7eb', text: '#52606d' };
+function barChart(el, weeks, series, line) {
+  const W = 520, H = 200, L = 34, B = 28, T = 8, R = 6, cw = (W - L - R) / weeks.length;
+  const max = Math.max(1, line?.value || 0, ...weeks.map((_, i) => series.reduce((m, s) => Math.max(m, s.stack ? series.filter(x => x.stack).reduce((t, x) => t + x.values[i], 0) : s.values[i]), 0)));
+  const raw = max / 4, mag = Math.pow(10, Math.floor(Math.log10(raw))), step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(v => v >= raw), top = step * 4;   // round axis steps
+  const y = v => T + (H - T - B) * (1 - v / top);
+  const groups = [...new Set(series.map(s => s.stack ? 'stack' : s.key))], bw = Math.min(26, (cw - 8) / groups.length);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="chart">`;
+  for (let k = 0; k <= 4; k++) { const v = top * k / 4; svg += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${C.grid}"/><text x="${L - 4}" y="${y(v) + 4}" font-size="10" text-anchor="end" fill="${C.text}">${Math.round(v)}</text>`; }
+  weeks.forEach((w, i) => {
+    const x0 = L + i * cw + (cw - bw * groups.length) / 2;
+    let stackY = 0;
+    groups.forEach((g, gi) => {
+      series.filter(s => (s.stack ? 'stack' : s.key) === g).forEach(s => {
+        const v = s.values[i], base = s.stack ? stackY : 0, h = y(base) - y(base + v);
+        if (v) svg += `<rect x="${x0 + gi * bw + 1}" y="${y(base + v)}" width="${bw - 2}" height="${h}" fill="${s.color}" rx="2"><title>${s.label}: ${v}</title></rect>`;
+        if (s.stack) stackY += v;
+      });
+    });
+    svg += `<text x="${L + i * cw + cw / 2}" y="${H - 10}" font-size="10" text-anchor="middle" fill="${C.text}">${w.label}</text>`;
+  });
+  if (line) svg += `<line x1="${L}" x2="${W - R}" y1="${y(line.value)}" y2="${y(line.value)}" stroke="${C.cap}" stroke-width="2" stroke-dasharray="5 4"><title>${line.label}: ${line.value}</title></line>`;
+  svg += '</svg>';
+  el.innerHTML = svg + `<div class="legend">${series.map(s => `<span><i style="background:${s.color}"></i>${s.label}</span>`).join('')}${line ? `<span><i style="background:${C.cap};height:2px"></i>${line.label} (${line.value}/wk)</span>` : ''}</div>`;
+}
+async function drawHomeCharts(ins) {
+  const monday = n => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + n * 7); return iso(d); };
+  const lab = d => new Date(d + 'T00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+  const [{ data: due }, { data: jobs }] = await Promise.all([sb.from('home_due_weekly').select('*'), sb.from('home_jobs_weekly').select('*')]);
+  const find = (rows, wk, k) => Number((rows || []).find(r => r.wk === wk)?.[k] || 0);
+  const ahead = [...Array(8)].map((_, i) => ({ wk: monday(i), label: i === 0 ? 'This wk' : lab(monday(i)) }));
+  barChart($('#chartAhead'), ahead, [
+    { key: 'due', label: 'Due (overdue in this week)', color: C.due, values: ahead.map(w => find(due, w.wk, 'due')) },
+    { key: 'booked', label: 'Booked', color: C.booked, values: ahead.map(w => find(jobs, w.wk, 'booked')) }],
+    { label: 'Team capacity', value: (ins || []).reduce((t, i) => t + (i.daily_capacity || 0), 0) * 5 });
+  const past = [...Array(12)].map((_, i) => ({ wk: monday(i - 11), label: lab(monday(i - 11)) }));
+  barChart($('#chartDone'), past, [
+    { key: 'done', label: 'Completed', color: C.done, stack: true, values: past.map(w => find(jobs, w.wk, 'completed')) },
+    { key: 'noacc', label: 'No access', color: C.noacc, stack: true, values: past.map(w => find(jobs, w.wk, 'no_access')) }]);
 }
 $('#homeCards').onclick = e => { const a = e.target.closest('[data-go]'); if (!a) return; e.preventDefault(); document.querySelector(`aside button[data-tab="${a.dataset.go}"]`).click(); };
 

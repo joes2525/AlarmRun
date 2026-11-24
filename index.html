@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
-<link rel="stylesheet" href="css/app.css?v=2611241011">
+<link rel="stylesheet" href="css/app.css?v=2611241014">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611241011"></script>
+<script src="config.js?v=2611241014"></script>
 </head>
 <body>
 <h1>AlarmRun – Office</h1>
@@ -124,6 +124,10 @@
   <div id="tab-home" class="tab hidden">
     <h2 id="homeHello">Home</h2>
     <div id="homeCards" class="cards"></div>
+    <div class="charts">
+      <div><h3>Workload ahead – next 8 weeks</h3><div id="chartAhead"></div></div>
+      <div><h3>Inspections done – last 12 weeks</h3><div id="chartDone"></div></div>
+    </div>
     <h3>Today's runs</h3>
     <div id="homeToday"></div>
   </div>
@@ -257,6 +261,6 @@
   </main>
 </section>
 
-<script src="js/app.js?v=2611241011"></script>
+<script src="js/app.js?v=2611241014"></script>
 </body>
 </html>
