@@ -107,6 +107,7 @@ def main():
         step('Approve a job', lambda: page.locator('#doneLists [data-appr]').first.click())
         step('Approve saved', lambda: None if page.evaluate("__CALLS.some(c => c[0]==='jobs' && c[1]==='update')") else errors.append('Approve: no update sent'))
         step('Messages page', lambda: tab('messages'))
+        step('Open Admin menu', lambda: page.click('#adminToggle'))
         step('Templates page', lambda: tab('templates'))
         step('Insert placeholder', lambda: page.locator('#tplChips button').first.click())
         step('Settings page', lambda: tab('settings'))

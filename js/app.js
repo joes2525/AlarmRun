@@ -803,9 +803,12 @@ $('#search').addEventListener('input', e => { clearTimeout(timer); timer = setTi
 $('#prev').onclick = () => { page--; loadList(); };
 $('#next').onclick = () => { page++; loadList(); };
 $('#back').onclick = () => { $('#detail').classList.add('hidden'); $('#listArea').classList.remove('hidden'); document.querySelectorAll('.tab form').forEach(f => f.classList.remove('hidden')); loadList(); };
+// Admin group in the sidebar opens/closes; stays open while one of its pages is showing
+$('#adminToggle').onclick = () => { const m = $('#adminMenu'); m.hidden = !m.hidden; $('#adminToggle').textContent = m.hidden ? 'Admin ▸' : 'Admin ▾'; };
 document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () => {
   tab = b.dataset.tab; page = 0; term = ''; $('#search').value = '';
   document.querySelectorAll('aside button').forEach(x => x.classList.toggle('on', x === b));
+  if (b.closest('#adminMenu')) { $('#adminMenu').hidden = false; $('#adminToggle').textContent = 'Admin ▾'; }
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('hidden', t.id !== 'tab-' + tab));
   $('#detail').classList.add('hidden');
   $('#weekArea').classList.toggle('hidden', !['book', 'scheduled'].includes(tab));

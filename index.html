@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
-<link rel="stylesheet" href="css/app.css?v=2611241039">
+<link rel="stylesheet" href="css/app.css?v=2611241041">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611241039"></script>
+<script src="config.js?v=2611241041"></script>
 </head>
 <body>
 <h1>AlarmRun – Office</h1>
@@ -39,16 +39,19 @@
     <button data-tab="scheduled">Scheduled</button>
     <button data-tab="completed">Completed</button>
     <button data-tab="messages">Messages</button>
-    <button data-tab="templates">Templates</button>
     <button data-tab="clients">Clients</button>
     <button data-tab="properties">Properties</button>
     <button data-tab="tenants">Tenants</button>
     <button data-tab="jobs">Jobs</button>
     <button data-tab="certificates">Certificates</button>
     <button data-tab="invoices">Invoices</button>
-    <button data-tab="inspectors">Inspectors</button>
-    <button data-tab="prices">Prices</button>
-    <button data-tab="settings">Settings</button>
+    <button type="button" id="adminToggle">Admin ▸</button>
+    <div id="adminMenu" class="submenu" hidden>
+      <button data-tab="settings">Settings</button>
+      <button data-tab="inspectors">Inspectors</button>
+      <button data-tab="prices">Prices</button>
+      <button data-tab="templates">Templates</button>
+    </div>
     <a href="tech.html" style="color:#cfd8e3;padding:8px 10px;margin-top:auto">📱 Inspector app</a>
     <button id="logout">Log out</button>
   </aside>
@@ -261,6 +264,6 @@
   </main>
 </section>
 
-<script src="js/app.js?v=2611241039"></script>
+<script src="js/app.js?v=2611241041"></script>
 </body>
 </html>
