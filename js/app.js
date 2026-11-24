@@ -167,11 +167,12 @@ async function openSchedule() {
   if (!weekStart) weekStart = planWeek(14);
   if (!inspectors.length) {
     const [{ data: ins }, { data: areas }] = await Promise.all([
-      sb.from('inspectors').select('id,name,daily_capacity,availability').eq('active', true).order('name'),
+      sb.from('inspectors').select('id,name,daily_capacity').eq('active', true).order('name'),
       sb.from('suburb_areas').select('suburb,area')]);
     inspectors = ins || [];
     (areas || []).forEach(a => areaOf[a.suburb] = a.area);
     drawInsFilter();
+    await loadOverrides();
   }
   if (tab === 'due') loadDue(); else { if (tab === 'book') renderReady(); dayTicked.clear(); loadWeek(); }
 }
@@ -355,11 +356,15 @@ async function bookTicked() {
 }
 
 // Week board: inspectors down, days across; each cell = total + areas (count)
-// ---- availability: fortnightly pattern, Week 1 = week starting Mon 5 Jan 2026 ----
-const FORTNIGHT_START = new Date('2026-01-05T00:00');
-const fortnightIndex = d => { const dt = new Date(d + 'T00:00'), days = Math.round((dt - FORTNIGHT_START) / 864e5);
-  return (((days % 14) + 14) % 14); };   // 0..13 → Week 1 Mon .. Week 2 Sun
-const isAvailable = (ins, d) => { const a = ins?.availability; return Array.isArray(a) ? a[fortnightIndex(d)] !== false : ![5, 6].includes(fortnightIndex(d) % 7); };
+// ---- availability: weekdays available, weekends not, unless a date has been changed (inspector_days) ----
+let dayOverrides = {};   // 'inspectorId|YYYY-MM-DD' → true/false
+const isWeekday = d => { const w = new Date(d + 'T00:00').getDay(); return w > 0 && w < 6; };
+const isAvailable = (ins, d) => { const o = dayOverrides[(ins?.id) + '|' + d]; return o ?? isWeekday(d); };
+async function loadOverrides() {
+  const from = addDays(-14), to = addDays(180);
+  const { data } = await sb.from('inspector_days').select('inspector_id,day,available').gte('day', from).lte('day', to);
+  dayOverrides = {}; (data || []).forEach(r => dayOverrides[r.inspector_id + '|' + r.day] = r.available);
+}
 // ---- which inspectors show on the boards ----
 let hiddenIns = new Set(); try { hiddenIns = new Set(JSON.parse(localStorage.getItem('hiddenIns') || '[]')); } catch {}
 const shownInspectors = () => inspectors.filter(i => !hiddenIns.has(i.id));
@@ -783,31 +788,28 @@ $('#doneLists').onclick = e => {
 // ---------- Inspector availability (Admin → Inspectors) ----------
 let availIns = [];
 async function loadAvail() {
-  const { data, error } = await sb.from('inspectors').select('id,name,availability').eq('active', true).order('name');
+  const [{ data, error }] = await Promise.all([sb.from('inspectors').select('id,name').eq('active', true).order('name'), loadOverrides()]);
   if (error) return msg(error.message);
   availIns = data;
-  const dn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], cur = fortnightIndex(iso(new Date())) < 7 ? 1 : 2;
-  $('#availNow').textContent = `This week is Week ${cur}. Changing a day also changes the same day two weeks later – it's a repeating fortnightly pattern.`;
-  // this week + the next 3, each labelled with its pattern week (the pattern repeats every two weeks)
+  const dn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const t0 = new Date(); t0.setHours(0, 0, 0, 0); t0.setDate(t0.getDate() - ((t0.getDay() + 6) % 7));
   const dt = k => { const d = new Date(t0); d.setDate(d.getDate() + k); return d; };
   const short = d => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
-  const pIdx = k => fortnightIndex(iso(dt(k)));   // 0..13 position in the pattern
-  $('#availGrid').innerHTML = `<tr><th></th>${[0, 1, 2, 3].map(w => `<th colspan="7">Week ${pIdx(w * 7) < 7 ? 1 : 2} · ${short(dt(w * 7))} – ${short(dt(w * 7 + 6))}</th>`).join('')}</tr>
+  $('#availNow').textContent = 'Weekdays are available and weekends are not, unless you change a day here.';
+  $('#availGrid').innerHTML = `<tr><th></th>${[0, 1, 2, 3].map(w => `<th colspan="7">${short(dt(w * 7))} – ${short(dt(w * 7 + 6))}</th>`).join('')}</tr>
     <tr><th>Inspector</th>${[...Array(28)].map((_, k) => `<th>${dn[k % 7]}<br><small style="font-weight:normal">${dt(k).getDate()}</small></th>`).join('')}</tr>` +
-    data.map(i => `<tr><th>${esc(i.name)}</th>${[...Array(28)].map((_, k) => { const n = pIdx(k), on = Array.isArray(i.availability) ? i.availability[n] !== false : n % 7 < 5;
-      return `<td class="${on ? 'on' : 'off'}" data-ins="${i.id}" data-k="${n}">${on ? '✓' : '✗'}</td>`; }).join('')}</tr>`).join('');
+    data.map(i => `<tr><th>${esc(i.name)}</th>${[...Array(28)].map((_, k) => { const d = iso(dt(k)), on = isAvailable(i, d);
+      return `<td class="${on ? 'on' : 'off'}" data-ins="${i.id}" data-day="${d}">${on ? '✓' : '✗'}</td>`; }).join('')}</tr>`).join('');
 }
 $('#availGrid').onclick = async e => {
-  const td = e.target.closest('td[data-k]'); if (!td) return;
-  const ins = availIns.find(i => i.id === td.dataset.ins);
-  const a = Array.isArray(ins.availability) ? [...ins.availability] : [...Array(14)].map((_, k) => k % 7 < 5);
-  a[+td.dataset.k] = !a[+td.dataset.k]; ins.availability = a;
-  document.querySelectorAll(`#availGrid td[data-ins="${ins.id}"][data-k="${td.dataset.k}"]`).forEach(c => {   // same day in both fortnights
-    c.className = a[+td.dataset.k] ? 'on' : 'off'; c.textContent = a[+td.dataset.k] ? '✓' : '✗'; });
-  const { error } = await sb.from('inspectors').update({ availability: a }).eq('id', ins.id);
-  if (error) { msg(error.message); return loadAvail(); }
-  const b = inspectors.find(i => i.id === ins.id); if (b) b.availability = a;   // boards pick it up too
+  const td = e.target.closest('td[data-day]'); if (!td) return;
+  const ins = availIns.find(i => i.id === td.dataset.ins), d = td.dataset.day, now = !isAvailable(ins, d);
+  td.className = now ? 'on' : 'off'; td.textContent = now ? '✓' : '✗';   // show straight away
+  const key = ins.id + '|' + d;
+  const { error } = now === isWeekday(d)      // back to normal → remove the change; otherwise save it
+    ? (delete dayOverrides[key], await sb.from('inspector_days').delete().eq('inspector_id', ins.id).eq('day', d))
+    : (dayOverrides[key] = now, await sb.from('inspector_days').upsert({ company_id: companyId, inspector_id: ins.id, day: d, available: now }));
+  if (error) { msg(error.message); loadAvail(); }
 };
 
 // ---------- Home ----------
