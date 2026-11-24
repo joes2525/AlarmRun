@@ -787,8 +787,13 @@ async function loadAvail() {
   if (error) return msg(error.message);
   availIns = data;
   const dn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], cur = fortnightIndex(iso(new Date())) < 7 ? 1 : 2;
-  $('#availNow').textContent = `This week is Week ${cur}, next week is Week ${cur === 1 ? 2 : 1}.`;
-  $('#availGrid').innerHTML = `<tr><th></th><th colspan="7">Week 1</th><th colspan="7">Week 2</th></tr><tr><th>Inspector</th>${[...dn, ...dn].map(d => `<th>${d}</th>`).join('')}</tr>` +
+  $('#availNow').textContent = `This week is Week ${cur}. Dates shown are the current fortnight – the pattern repeats every two weeks.`;
+  // show the dates of the current fortnight (the pattern repeats every two weeks)
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0); t0.setDate(t0.getDate() - fortnightIndex(iso(new Date())));
+  const dt = k => { const d = new Date(t0); d.setDate(d.getDate() + k); return d; };
+  const short = d => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+  $('#availGrid').innerHTML = `<tr><th></th><th colspan="7">Week 1 · ${short(dt(0))} – ${short(dt(6))}</th><th colspan="7">Week 2 · ${short(dt(7))} – ${short(dt(13))}</th></tr>
+    <tr><th>Inspector</th>${[...Array(14)].map((_, k) => `<th>${dn[k % 7]}<br><small style="font-weight:normal">${dt(k).getDate()}</small></th>`).join('')}</tr>` +
     data.map(i => `<tr><th>${esc(i.name)}</th>${[...Array(14)].map((_, k) => { const on = i.availability?.[k] !== false && !(i.availability == null && k % 7 > 4);
       return `<td class="${on ? 'on' : 'off'}" data-ins="${i.id}" data-k="${k}">${on ? '✓' : '✗'}</td>`; }).join('')}</tr>`).join('');
 }
