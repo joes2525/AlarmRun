@@ -16,13 +16,19 @@ const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body)
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });   // browser pre-check
-  // only signed-in users of the app (or the scheduler using the service key) may run this
-  if (!req.headers.get("Authorization")) return reply({ error: "Unauthorized" }, 401);
 
   // Supabase provides its admin key to functions automatically (name differs between old and new key systems)
   const adminKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SECRET_KEY");
   if (!adminKey) return reply({ error: "No Supabase admin key available to the function" }, 500);
   const db = createClient(Deno.env.get("SUPABASE_URL")!, adminKey);
+
+  // only signed-in app users (or the scheduler using the admin key) may run this
+  const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (!token) return reply({ error: "Not signed in" }, 401);
+  if (token !== adminKey) {
+    const { data: { user } } = await db.auth.getUser(token);
+    if (!user) return reply({ error: "Not signed in" }, 401);
+  }
   const key = Deno.env.get("RESEND_API_KEY");
   if (!key) return reply({ error: "RESEND_API_KEY secret is not set" }, 500);
 
