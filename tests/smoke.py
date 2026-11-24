@@ -56,6 +56,7 @@ function builder(table) {
 window.supabase = { createClient: () => ({
   auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', email: 'test@x.com' } } } }), getUser: async () => ({ data: { user: { id: 'u1' } } }), signOut: async () => ({}) },
   from: builder, rpc: async (fn, args) => { window.__CALLS.push(['rpc', fn, args]); return { data: 'C123', error: null }; },
+  functions: { invoke: async () => ({ data: { sent: 1, failed: 0 }, error: null }) },
   storage: { from: () => ({ upload: async () => ({ error: null }), createSignedUrls: async (paths) => ({ data: paths.map(() => ({ signedUrl: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22200%22%3E%3Crect width=%22300%22 height=%22200%22 fill=%22%23b8c4d0%22/%3E%3C/svg%3E' })) }) }) },
 }) };
 """

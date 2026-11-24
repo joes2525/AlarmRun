@@ -597,7 +597,11 @@ const setMsgStatus = async (status, label) => {
 $('#msgNow').onclick = async () => {
   if (!msgTicked.size) return msg('Tick some messages first');
   const { error } = await sb.from('messages').update({ send_after: new Date().toISOString(), status: 'queued', error: null }).in('id', [...msgTicked]);
-  msg(error ? error.message : `${msgTicked.size} set to send now (they'll go once a sending service is connected)`); loadMessages();
+  if (error) return msg(error.message);
+  msg('Sending…');
+  const { data, error: fnErr } = await sb.functions.invoke('send-messages');   // texts and letters are skipped for now
+  msg(fnErr ? 'Sender not set up yet: ' + fnErr.message : `Emails sent: ${data.sent}, failed: ${data.failed}` + (data.failed ? ' – see the message for the reason' : ''));
+  loadMessages();
 };
 $('#msgList').addEventListener('click', async e => {
   const id = e.target.dataset.posted; if (!id) return;
