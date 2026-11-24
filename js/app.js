@@ -498,18 +498,20 @@ async function loadMessages() {
   let q = sb.from('messages').select('id,kind,channel,to_name,to_address,subject,body,for_date,send_after,status,error,properties(address_line,suburb)')
     .order('send_after').limit(500);
   if ($('#msgStatus').value) q = q.eq('status', $('#msgStatus').value);
+  if ($('#msgChannel').value) q = q.eq('channel', $('#msgChannel').value);
   const { data, error } = await q;
   if (error) return msg(error.message);
   msgTicked.clear();
-  const kind = { entry_notice: 'Entry notice', entry_notice_changed: 'Entry notice – date changed' };
+  const kind = { entry_notice: 'Entry notice', entry_notice_changed: 'Entry notice – date changed', reminder: 'Reminder' };
   $('#msgInfo').textContent = `${data.length} message${data.length === 1 ? '' : 's'}`;
   $('#msgList').innerHTML = '<tr><th><input type="checkbox" id="msgAll"></th><th>Send (Qld time)</th><th>Visit</th><th>To / subject</th><th>Message</th></tr>' +
     data.map(m => `<tr class="prow"><td><input type="checkbox" class="mpick" value="${m.id}"></td><td>${new Date(m.send_after).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td><td>${date(m.for_date)}</td>
       <td style="white-space:normal;width:22%"><b>${esc(m.to_name)}</b> <small>${esc(m.to_address || '— no email')}</small><br>
-        ${esc(m.properties?.address_line)}, ${esc(m.properties?.suburb)} – ${kind[m.kind] || esc(m.kind)}${m.error ? `<br><small class="bad">${esc(m.error)}</small>` : ''}</td>
+        ${esc(m.properties?.address_line)}, ${esc(m.properties?.suburb)} – ${m.channel === 'sms' ? '💬 Text' : '✉ Email'}: ${kind[m.kind] || esc(m.kind)}${m.error ? `<br><small class="bad">${esc(m.error)}</small>` : ''}</td>
       <td style="white-space:pre-wrap;font-size:13px">${esc(m.body)}</td></tr>`).join('');
 }
 $('#msgStatus').onchange = loadMessages;
+$('#msgChannel').onchange = loadMessages;
 $('#msgList').onchange = e => {
   const boxes = e.target.id === 'msgAll' ? [...document.querySelectorAll('.mpick')] : e.target.classList.contains('mpick') ? [e.target] : [];
   boxes.forEach(c => { c.checked = e.target.checked; c.checked ? msgTicked.add(c.value) : msgTicked.delete(c.value); });
@@ -539,7 +541,7 @@ async function loadTemplates() {
   if (error) return msg(error.message);
   templates = data;
   const cur = $('#tplPick').value;
-  $('#tplPick').innerHTML = data.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  $('#tplPick').innerHTML = data.map(t => `<option value="${t.id}">${t.channel === 'sms' ? '💬 ' : '✉ '}${esc(t.name)}</option>`).join('');
   if (cur) $('#tplPick').value = cur;
   $('#tplChips').innerHTML = PLACEHOLDERS.map(p => `<button type="button" data-ph="${p}">{${p}}</button>`).join('');
   showTemplate();
@@ -547,12 +549,19 @@ async function loadTemplates() {
 function showTemplate() {
   const t = templates.find(x => x.id === $('#tplPick').value); if (!t) return;
   $('#tplSubject').value = t.subject || ''; $('#tplBody').value = t.body || ''; $('#tplInfo').textContent = '';
+  const sms = t.channel === 'sms';
+  $('#tplSubject').closest('label').hidden = sms; $('#tplBody').rows = sms ? 5 : 18;
   previewTemplate();
 }
 function previewTemplate() {
   const v = sampleVars();
   $('#tplPrevSubject').textContent = fill($('#tplSubject').value, v);
   $('#tplPrevBody').textContent = fill($('#tplBody').value, v);
+  const t = templates.find(x => x.id === $('#tplPick').value);
+  if (t?.channel === 'sms') {   // 1 text = 160 characters (70 if it contains emoji etc.)
+    const len = $('#tplPrevBody').textContent.length, per = /[^\x00-\x7F’–]/.test($('#tplPrevBody').textContent) ? 70 : 160;
+    $('#tplPrevSubject').textContent = `Text message · ${len} characters · ${Math.ceil(len / per) || 1} text${len > per ? 's' : ''} (with example details)`;
+  }
 }
 $('#tplPick').onchange = showTemplate;
 ['#tplSubject', '#tplBody'].forEach(id => { $(id).oninput = () => { previewTemplate(); $('#tplInfo').textContent = 'Unsaved changes'; }; $(id).onfocus = () => tplField = $(id); });

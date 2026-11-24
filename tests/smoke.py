@@ -38,7 +38,8 @@ window.__DATA = {
     { id: 'j6', status: 'no_access', done_at: '%DAY%T05:00:00Z', address_line: '6 Test St', suburb: 'COOMERA', agency: 'Evolve', inspector: 'Liam', comment: 'No one home', has_invoice: false, has_quote: false }],
   home_due_weekly: [{ wk: '%MON%', due: 40 }],
   home_jobs_weekly: [{ wk: '%MON%', completed: 60, no_access: 5, booked: 30 }],
-  templates: [{ id: 't1', name: 'Entry notice', subject: 'Entry {Address}', body: 'Hi {Tenant greeting}' }],
+  templates: [{ id: 't1', name: 'Entry notice', channel: 'email', subject: 'Entry {Address}', body: 'Hi {Tenant greeting}' },
+    { id: 't2', name: 'Reminder (text)', channel: 'sms', subject: null, body: 'Reminder {Address} on {Visit date}' }],
 };
 window.__CALLS = [];
 function builder(table) {
@@ -110,6 +111,7 @@ def main():
         step('Open Admin menu', lambda: page.click('#adminToggle'))
         step('Templates page', lambda: tab('templates'))
         step('Insert placeholder', lambda: page.locator('#tplChips button').first.click())
+        step('SMS template shows counter', lambda: (page.select_option('#tplPick', 't2'), None if 'characters' in page.inner_text('#tplPrevSubject') else errors.append('SMS counter missing')))
         step('Settings page', lambda: tab('settings'))
         step('Prices page', lambda: (tab('prices'), page.wait_for_selector('#pxLists input[data-f="price"]', timeout=2000)))
         step('Edit a price and save', lambda: (page.fill('#pxLists input[data-f="price"]', '90'), page.click('#pxSave')))
