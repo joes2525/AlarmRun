@@ -46,3 +46,7 @@ header button.link { color: #cfd8e3; }
 .day { display: flex; justify-content: space-between; align-items: center; }
 .day b { font-size: 17px; }
 .day .count { font-size: 22px; font-weight: 700; color: #1f6feb; }
+.map { height: 240px; border-radius: 10px; margin: 0 0 10px; background: #dde3ea; }
+.map:empty { display: none; }
+.pin { background: #1f6feb; color: #fff; border-radius: 50%; width: 26px; height: 26px; line-height: 26px; text-align: center; font-weight: 700; font-size: 13px; border: 2px solid #fff; box-shadow: 0 1px 3px #0006; }
+.pin.done { background: #7b8794; }
