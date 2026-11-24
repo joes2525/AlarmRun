@@ -310,6 +310,18 @@ $('#backToDue').onclick = () => {
   ticked.ready.clear(); saveStaged(); renderReady();
 };
 
+// Put an inspector's day in a sensible order: postcode → suburb → street → house number
+async function orderDay(insId, day) {
+  const { data } = await sb.from('jobs').select('id,properties(address_line,suburb,postcode)').eq('inspector_id', insId)
+    .gte('scheduled_start', day + 'T00:00').lte('scheduled_start', day + 'T23:59').in('status', ['booked', 'in_progress']);
+  if (!data?.length) return;
+  const key = j => { const p = j.properties || {}, a = (p.address_line || '').trim();
+    const street = a.replace(/^[\d\s/,-]+[a-z]?\s+/i, '').toLowerCase(), num = parseInt(a.split('/').pop()) || 0;
+    return [p.postcode || '9999', (p.suburb || '').toLowerCase(), street, String(num).padStart(6, '0'), a].join('|'); };
+  data.sort((x, y) => key(x).localeCompare(key(y)));
+  await Promise.all(data.map((j, i) => sb.from('jobs').update({ route_order: i + 1 }).eq('id', j.id)));
+}
+
 // selected board cell (the From day on Scheduled)
 const pick = { ins: '', day: '' };
 const onBoard = (ins, day) => weekJobs.filter(j => j.ins === ins && j.day === day).length;   // jobs already on that day
@@ -336,6 +348,7 @@ async function bookTicked() {
     fresh.length ? sb.from('jobs').insert(fresh) : {},
     jobIds.length ? sb.from('jobs').update({ status: 'booked', inspector_id: insId, scheduled_start: when }).in('id', jobIds) : {}]);
   const err = results.find(r => r.error)?.error;
+  if (!err) await orderDay(insId, day);
   msg(err ? 'Booking failed: ' + err.message : `Booked ${picks.length}`);
   Promise.all([renderReady(), loadWeek()]);
 }
@@ -434,7 +447,10 @@ async function openDay() {
     data.map((j, i) => `<tr><td>${tab === 'scheduled' ? `<input type="checkbox" class="dpick" value="${j.id}"${dayTicked.has(j.id) ? ' checked' : ''}>` : i + 1}</td><td>${esc(j.properties?.address_line)}, ${esc(j.properties?.suburb)}</td>
       <td>${esc(j.properties?.clients?.name)}</td><td>${esc(areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || '')}</td>
       <td>${label[j.job_type] || esc(j.job_type)}</td><td>${esc(j.status)}</td>
-      <td>${j.status === 'booked' ? `<button data-unbook="${j.id}" data-type="${j.job_type}">Unbook</button>` : ''}</td><td>${esc(j.notes)}</td></tr>`).join('') + '</table></div>';
+      <td>${j.status === 'booked' ? `<button data-unbook="${j.id}" data-type="${j.job_type}">Unbook</button>` : ''}
+        <button data-up="${i}" title="Move up" ${i ? '' : 'disabled'}>▲</button><button data-down="${i}" title="Move down" ${i < data.length - 1 ? '' : 'disabled'}>▼</button></td>
+      <td>${esc(j.notes)}</td></tr>`).join('') + '</table></div>';
+  dayJobIds = data.map(j => j.id);
 }
 // unbooked jobs keep existing but lose their inspector/day, so they land back in Ready to book
 // ---------- Scheduled page actions ----------
@@ -448,10 +464,13 @@ async function actOnTicked(change, done) {
   dayTicked.clear(); showTicked(); msg(done(ids.length)); to.ins = to.day = null;
   Promise.all([loadWeek(), renderReady()]);
 }
-$('#doMove').onclick = () => {
+$('#doMove').onclick = async () => {
   if (!to.ins) return msg('Click a day on the To board first');
-  actOnTicked({ inspector_id: to.ins, scheduled_start: `${to.day}T09:00:00` },
-    n => `Moved ${n} to ${inspectors.find(i => i.id === to.ins).name} on ${to.day}`);
+  const from = { ins: pick.ins, day: pick.day }, dest = { ...to };
+  await actOnTicked({ inspector_id: dest.ins, scheduled_start: `${dest.day}T09:00:00` },
+    n => `Moved ${n} to ${inspectors.find(i => i.id === dest.ins).name} on ${dest.day}`);
+  await Promise.all([orderDay(dest.ins, dest.day), from.ins ? orderDay(from.ins, from.day) : null]);
+  openDay();
 };
 $('#doUnbook').onclick = () => actOnTicked({ status: 'booked', inspector_id: null, scheduled_start: null, route_order: null }, n => `Unbooked ${n} – back in Ready to book`);
 $('#doCancel').onclick = () => {
@@ -460,6 +479,17 @@ $('#doCancel').onclick = () => {
 };
 
 const unbook = ids => sb.from('jobs').update({ status: 'booked', inspector_id: null, scheduled_start: null, route_order: null }).in('id', [].concat(ids));
+let dayJobIds = [];
+$('#dayView').addEventListener('click', async e => {
+  const up = e.target.dataset.up, down = e.target.dataset.down;
+  if (up == null && down == null) return;
+  const i = +(up ?? down), k = up != null ? i - 1 : i + 1;
+  [dayJobIds[i], dayJobIds[k]] = [dayJobIds[k], dayJobIds[i]];
+  const rows = [...document.querySelectorAll('#dayView tr.prow')];   // swap rows on screen straight away
+  if (up != null) rows[i].after(rows[k]); else rows[k].after(rows[i]);
+  await Promise.all(dayJobIds.map((id, n) => sb.from('jobs').update({ route_order: n + 1 }).eq('id', id)));
+  openDay();
+});
 $('#dayView').onclick = async e => {
   const id = e.target.dataset.unbook; if (!id) return;
   e.target.closest('tr').remove(); weekJobs = weekJobs.filter(j => j.id !== id); drawWeek();

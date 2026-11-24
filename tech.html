@@ -6,11 +6,9 @@
 <meta name="theme-color" content="#1f2933">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>AlarmRun – Inspector</title>
-<link rel="stylesheet" href="css/tech.css?v=2611241155">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="css/tech.css?v=2611241205">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611241155"></script>
+<script src="config.js?v=2611241205"></script>
 </head>
 <body>
 <header>
@@ -38,8 +36,7 @@
 <section id="run" hidden>
   <button class="link" id="toHome">← Home</button>
   <div class="daybar"><button id="prevDay">◀</button><h2 id="dayLabel"></h2><button id="nextDay">▶</button></div>
-  <div id="runMap" class="map"></div>
-  <button id="bestOrder" style="width:100%;margin-bottom:10px">🧭 Suggest best order</button>
+  <div class="row" style="margin:0 0 10px"><button id="reorder">↕ Reorder</button></div>
   <div id="jobs"></div>
 </section>
 
@@ -48,6 +45,6 @@
   <div id="jobBody"></div>
 </section>
 
-<script src="js/tech.js?v=2611241155"></script>
+<script src="js/tech.js?v=2611241205"></script>
 </body>
 </html>

@@ -80,7 +80,7 @@ async function loadRun() {
   show('run'); msg('');
   $('#dayLabel').textContent = day === iso(new Date()) ? 'Today' : niceDate(day);
   const { data, error } = await sb.from('jobs')
-    .select('id,job_type,status,route_order,notes,property_id,properties(id,address_line,suburb,postcode,lat,lng,access_notes,clients(name))')
+    .select('id,job_type,status,route_order,notes,property_id,properties(id,address_line,suburb,postcode,access_notes,clients(name))')
     .eq('inspector_id', inspectorId).gte('scheduled_start', day + 'T00:00').lte('scheduled_start', day + 'T23:59')
     .in('status', ['booked', 'in_progress', 'completed', 'no_access']).order('route_order', { nullsFirst: false });
   if (error) return msg(error.message);
@@ -96,70 +96,33 @@ async function loadRun() {
       ${p.access_notes ? `<div class="muted" style="margin-top:4px">${esc(p.access_notes)}</div>` : ''}
     </div>`;
   }).join('') || '<div class="card">No jobs booked for this day.</div>');
-  runJobs = data; drawMap(data);
+  runJobs = data; reordering = false; $('#reorder').textContent = '↕ Reorder';
 }
 
-// ---------- map + route order ----------
-let runJobs = [], map = null;
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-// Look up coordinates for addresses we haven't placed yet (OpenStreetMap, 1 per second), and save them
-async function geocode(jobs) {
-  const missing = jobs.map(j => j.properties).filter(p => p && p.lat == null);
-  for (const [i, p] of missing.entries()) {
-    msg(`Finding addresses on the map… ${i + 1} of ${missing.length}`);
-    try {
-      const q = encodeURIComponent(`${p.address_line}, ${p.suburb} QLD ${p.postcode || ''}, Australia`);
-      const r = await (await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=au&q=${q}`)).json();
-      if (r[0]) { p.lat = +r[0].lat; p.lng = +r[0].lon; await sb.from('properties').update({ lat: p.lat, lng: p.lng }).eq('id', p.id); }
-      else p.lat = p.lng = undefined;
-    } catch { return msg('Couldn\'t reach the map service – try again later'); }
-    if (i < missing.length - 1) await sleep(1100);
-  }
-  msg('');
-}
-async function drawMap(jobs) {
-  if (!window.L || !jobs.length) { $('#runMap').innerHTML = ''; return; }
-  await geocode(jobs);
-  const pts = jobs.map((j, i) => ({ j, i, p: j.properties })).filter(x => x.p?.lat != null);
-  if (map) { map.remove(); map = null; }
-  if (!pts.length) return;
-  map = L.map('runMap', { zoomControl: false, attributionControl: true });
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
-  pts.forEach(({ j, i, p }) => L.marker([p.lat, p.lng], { icon: L.divIcon({ className: '', html: `<div class="pin ${['booked', 'in_progress'].includes(j.status) ? '' : 'done'}">${i + 1}</div>`, iconSize: [26, 26] }) })
-    .addTo(map).on('click', () => openJob(j.id)));
-  L.polyline(pts.map(x => [x.p.lat, x.p.lng]), { color: '#1f6feb', weight: 2, opacity: .6, dashArray: '4 6' }).addTo(map);
-  map.fitBounds(pts.map(x => [x.p.lat, x.p.lng]), { padding: [25, 25] });
-}
-// Nearest-next-stop from where you are (or the first job), then tidy up crossings (2-opt)
-const dist = (a, b) => { const R = 6371, dLa = (b.lat - a.lat) * Math.PI / 180, dLo = (b.lng - a.lng) * Math.PI / 180;
-  const h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
-function bestOrder(stops, start) {
-  const left = [...stops], route = [];
-  let at = start || left[0];
-  while (left.length) { left.sort((a, b) => dist(at, a) - dist(at, b)); at = left.shift(); route.push(at); }
-  const len = r => r.reduce((t, s, i) => t + (i ? dist(r[i - 1], s) : start ? dist(start, s) : 0), 0);
-  for (let improved = true; improved;) {
-    improved = false;
-    for (let i = 0; i < route.length - 1; i++) for (let k = i + 1; k < route.length; k++) {
-      const r2 = [...route.slice(0, i), ...route.slice(i, k + 1).reverse(), ...route.slice(k + 1)];
-      if (len(r2) < len(route) - 0.01) { route.splice(0, route.length, ...r2); improved = true; }
-    }
-  }
-  return route;
-}
-$('#bestOrder').onclick = async () => {
-  const todo = runJobs.filter(j => ['booked', 'in_progress'].includes(j.status));
-  if (todo.length < 2) return msg('Nothing to reorder');
-  await geocode(todo);
-  const stops = todo.filter(j => j.properties?.lat != null).map(j => ({ id: j.id, lat: j.properties.lat, lng: j.properties.lng }));
-  if (stops.length < 2) return msg('Couldn\'t place enough addresses on the map');
-  const here = await new Promise(res => navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => res({ lat: p.coords.latitude, lng: p.coords.longitude }), () => res(null), { timeout: 5000 }) : res(null));
-  const route = bestOrder(stops, here);
-  const doneCount = runJobs.length - todo.length;
-  const results = await Promise.all(route.map((s, i) => sb.from('jobs').update({ route_order: doneCount + i + 1 }).eq('id', s.id)));
-  const err = results.find(r => r.error)?.error;
-  msg(err ? err.message : `Reordered ${route.length} jobs${here ? ' from where you are' : ''}`); loadRun();
+// ---------- reorder ----------
+let runJobs = [], reordering = false;
+$('#reorder').onclick = async () => {
+  if (!reordering) { reordering = true; $('#reorder').textContent = '✓ Save order'; return drawReorder(); }
+  const todo = runJobs.filter(j => ['booked', 'in_progress'].includes(j.status)), done = runJobs.length - todo.length;
+  $('#reorder').disabled = true;
+  const res = await Promise.all(todo.map((j, i) => sb.from('jobs').update({ route_order: done + i + 1 }).eq('id', j.id)));
+  $('#reorder').disabled = false; reordering = false; $('#reorder').textContent = '↕ Reorder';
+  msg(res.find(r => r.error)?.error.message || ''); loadRun();
 };
+function drawReorder() {
+  const todo = runJobs.filter(j => ['booked', 'in_progress'].includes(j.status));
+  $('#jobs').innerHTML = '<p class="muted">Move jobs up or down, then tap Save order.</p>' + todo.map((j, i) => `<div class="card day">
+    <div><b>${i + 1}. ${esc(j.properties?.address_line)}</b><div class="muted">${esc(j.properties?.suburb)}</div></div>
+    <div style="display:flex;gap:6px"><button data-mv="${i}" data-d="-1" ${i ? '' : 'disabled'}>▲</button><button data-mv="${i}" data-d="1" ${i < todo.length - 1 ? '' : 'disabled'}>▼</button></div></div>`).join('');
+}
+$('#jobs').addEventListener('click', e => {
+  const b = e.target.closest('[data-mv]'); if (!b || !reordering) return;
+  e.stopPropagation();
+  const todo = runJobs.filter(j => ['booked', 'in_progress'].includes(j.status)), rest = runJobs.filter(j => !todo.includes(j));
+  const i = +b.dataset.mv, k = i + +b.dataset.d;
+  [todo[i], todo[k]] = [todo[k], todo[i]];
+  runJobs = [...rest, ...todo]; drawReorder();
+}, true);
 
 $('#jobs').onclick = e => { const c = e.target.closest('[data-job]'); if (c) openJob(c.dataset.job); };
 const shiftDay = n => { const d = new Date(day + 'T00:00'); d.setDate(d.getDate() + n); day = iso(d); loadRun(); };
