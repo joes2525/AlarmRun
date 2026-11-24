@@ -787,22 +787,24 @@ async function loadAvail() {
   if (error) return msg(error.message);
   availIns = data;
   const dn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], cur = fortnightIndex(iso(new Date())) < 7 ? 1 : 2;
-  $('#availNow').textContent = `This week is Week ${cur}. Dates shown are the current fortnight – the pattern repeats every two weeks.`;
-  // show the dates of the current fortnight (the pattern repeats every two weeks)
-  const t0 = new Date(); t0.setHours(0, 0, 0, 0); t0.setDate(t0.getDate() - fortnightIndex(iso(new Date())));
+  $('#availNow').textContent = `This week is Week ${cur}. Changing a day also changes the same day two weeks later – it's a repeating fortnightly pattern.`;
+  // this week + the next 3, each labelled with its pattern week (the pattern repeats every two weeks)
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0); t0.setDate(t0.getDate() - ((t0.getDay() + 6) % 7));
   const dt = k => { const d = new Date(t0); d.setDate(d.getDate() + k); return d; };
   const short = d => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
-  $('#availGrid').innerHTML = `<tr><th></th><th colspan="7">Week 1 · ${short(dt(0))} – ${short(dt(6))}</th><th colspan="7">Week 2 · ${short(dt(7))} – ${short(dt(13))}</th></tr>
-    <tr><th>Inspector</th>${[...Array(14)].map((_, k) => `<th>${dn[k % 7]}<br><small style="font-weight:normal">${dt(k).getDate()}</small></th>`).join('')}</tr>` +
-    data.map(i => `<tr><th>${esc(i.name)}</th>${[...Array(14)].map((_, k) => { const on = i.availability?.[k] !== false && !(i.availability == null && k % 7 > 4);
-      return `<td class="${on ? 'on' : 'off'}" data-ins="${i.id}" data-k="${k}">${on ? '✓' : '✗'}</td>`; }).join('')}</tr>`).join('');
+  const pIdx = k => fortnightIndex(iso(dt(k)));   // 0..13 position in the pattern
+  $('#availGrid').innerHTML = `<tr><th></th>${[0, 1, 2, 3].map(w => `<th colspan="7">Week ${pIdx(w * 7) < 7 ? 1 : 2} · ${short(dt(w * 7))} – ${short(dt(w * 7 + 6))}</th>`).join('')}</tr>
+    <tr><th>Inspector</th>${[...Array(28)].map((_, k) => `<th>${dn[k % 7]}<br><small style="font-weight:normal">${dt(k).getDate()}</small></th>`).join('')}</tr>` +
+    data.map(i => `<tr><th>${esc(i.name)}</th>${[...Array(28)].map((_, k) => { const n = pIdx(k), on = Array.isArray(i.availability) ? i.availability[n] !== false : n % 7 < 5;
+      return `<td class="${on ? 'on' : 'off'}" data-ins="${i.id}" data-k="${n}">${on ? '✓' : '✗'}</td>`; }).join('')}</tr>`).join('');
 }
 $('#availGrid').onclick = async e => {
   const td = e.target.closest('td[data-k]'); if (!td) return;
   const ins = availIns.find(i => i.id === td.dataset.ins);
   const a = Array.isArray(ins.availability) ? [...ins.availability] : [...Array(14)].map((_, k) => k % 7 < 5);
   a[+td.dataset.k] = !a[+td.dataset.k]; ins.availability = a;
-  td.className = a[+td.dataset.k] ? 'on' : 'off'; td.textContent = a[+td.dataset.k] ? '✓' : '✗';   // show straight away
+  document.querySelectorAll(`#availGrid td[data-ins="${ins.id}"][data-k="${td.dataset.k}"]`).forEach(c => {   // same day in both fortnights
+    c.className = a[+td.dataset.k] ? 'on' : 'off'; c.textContent = a[+td.dataset.k] ? '✓' : '✗'; });
   const { error } = await sb.from('inspectors').update({ availability: a }).eq('id', ins.id);
   if (error) { msg(error.message); return loadAvail(); }
   const b = inspectors.find(i => i.id === ins.id); if (b) b.availability = a;   // boards pick it up too
