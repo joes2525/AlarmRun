@@ -3,11 +3,12 @@ const sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const msg = t => { $('#msg').textContent = t || ''; if (t) scrollTo(0, 0); };
-const show = id => ['login', 'run', 'job'].forEach(s => $('#' + s).hidden = s !== id);
+const show = id => ['login', 'home', 'run', 'job'].forEach(s => $('#' + s).hidden = s !== id);
 const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const niceDate = d => new Date(d + 'T00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' });
 const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
+let inspectorName = '', areaOf = {};
 let companyId = null, inspectorId = null, day = iso(new Date()), job = null;
 
 // ---------- start-up ----------
@@ -19,16 +20,60 @@ async function start() {
   companyId = m[0].company_id;
   const { data: ins } = await sb.from('inspectors').select('id,name,user_id').eq('active', true).order('name');
   const mine = (ins || []).find(i => i.user_id === session.user.id);
-  if (mine) inspectorId = mine.id;
+  if (mine) { inspectorId = mine.id; inspectorName = mine.name; }
   else if (['owner', 'admin'].includes(m[0].role)) {     // office staff can view any inspector's run
     const pick = $('#asInspector');
     pick.innerHTML = ins.map(i => `<option value="${i.id}">Viewing as: ${esc(i.name)}</option>`).join('');
     pick.value = ins.some(i => i.id === store.get('asInspector')) ? store.get('asInspector') : ins[0]?.id;
-    pick.hidden = false; inspectorId = pick.value;
-    pick.onchange = () => { inspectorId = pick.value; store.set('asInspector', inspectorId); loadRun(); };
+    pick.hidden = false; inspectorId = pick.value; inspectorName = ins.find(i => i.id === inspectorId)?.name || '';
+    pick.onchange = () => { inspectorId = pick.value; inspectorName = ins.find(i => i.id === inspectorId)?.name || ''; store.set('asInspector', inspectorId); loadHome(); };
   } else return msg('Your login is not linked to an inspector yet – ask the office');
-  loadRun();
+  const { data: areas } = await sb.from('suburb_areas').select('suburb,area');
+  (areas || []).forEach(a => areaOf[a.suburb] = a.area);
+  loadHome();
 }
+
+// ---------- home ----------
+async function loadHome() {
+  show('home'); msg('');
+  const t = iso(new Date()), end = new Date(); end.setDate(end.getDate() + 21);
+  const h = new Date().getHours();
+  $('#hello').textContent = `${h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'}${inspectorName ? ', ' + inspectorName : ''}`;
+  $('#today').textContent = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
+  const { data, error } = await sb.from('jobs').select('id,status,scheduled_start,route_order,properties(address_line,suburb,postcode)')
+    .eq('inspector_id', inspectorId).gte('scheduled_start', t + 'T00:00').lte('scheduled_start', iso(end) + 'T23:59')
+    .in('status', ['booked', 'in_progress', 'completed', 'no_access']).order('scheduled_start').order('route_order', { nullsFirst: false });
+  if (error) return msg(error.message);
+  const todays = data.filter(j => j.scheduled_start.slice(0, 10) === t);
+  const done = todays.filter(j => ['completed', 'no_access'].includes(j.status)).length;
+  const next = todays.find(j => ['booked', 'in_progress'].includes(j.status));
+  const days = {};
+  data.filter(j => j.scheduled_start.slice(0, 10) > t && ['booked', 'in_progress'].includes(j.status))
+    .forEach(j => (days[j.scheduled_start.slice(0, 10)] ??= []).push(j));
+  const areas = js => [...new Set(js.map(j => areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || j.properties?.suburb))].slice(0, 3).join(', ');
+  const p = next?.properties || {};
+  $('#homeBody').innerHTML = `
+    <div class="card"><div class="muted">Today</div>
+      ${todays.length ? `<div class="big">${todays.length - done} <span style="font-size:16px;font-weight:400">to go of ${todays.length}</span></div>
+        <div class="bar"><i style="width:${Math.round(done / todays.length * 100)}%"></i></div>
+        <div class="muted">${esc(areas(todays))}</div>
+        <button class="primary" data-day="${t}" style="margin-top:10px">${done ? 'Continue' : 'Start'} today's run</button>`
+      : '<p>No inspections booked today. Enjoy! 🙂</p>'}
+    </div>
+    ${next ? `<div class="card"><div class="muted">Next job</div><h3>${esc(p.address_line)}</h3><div class="muted">${esc(p.suburb)} ${esc(p.postcode)}</div>
+      <div class="row"><button data-job="${next.id}">Open job</button>
+        <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${p.address_line}, ${p.suburb} QLD ${p.postcode || ''}`)}" target="_blank"><button style="width:100%">🧭 Navigate</button></a></div></div>` : ''}
+    <h3 style="margin:16px 2px 8px">Coming up</h3>
+    ${Object.keys(days).length ? Object.entries(days).map(([d, js]) => `<div class="card day" data-day="${d}">
+        <div><b>${new Date(d + 'T00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' })}</b><div class="muted">${esc(areas(js))}</div></div>
+        <div class="count">${js.length}</div></div>`).join('')
+      : '<div class="card muted">Nothing else booked in the next 3 weeks yet.</div>'}`;
+}
+$('#homeBody').onclick = e => {
+  const j = e.target.closest('[data-job]'); if (j) return openJob(j.dataset.job);
+  const d = e.target.closest('[data-day]'); if (d) { day = d.dataset.day; loadRun(); }
+};
+$('#toHome').onclick = () => loadHome();
 
 // ---------- today's run ----------
 async function loadRun() {

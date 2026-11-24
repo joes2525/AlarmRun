@@ -153,6 +153,8 @@ def main():
             try: fn(); m.wait_for_timeout(250)
             except Exception as e: errors.append(f'{name}: {e}')
             print(('FAIL ' if len(errors) > before else 'ok   ') + name)
+        mstep('Tech: home screen', lambda: m.wait_for_selector('#homeBody .card', timeout=3000))
+        mstep('Tech: open a day from Coming up', lambda: m.locator('#homeBody [data-day]').first.click())
         mstep('Tech: run list shows a job', lambda: m.wait_for_selector('#jobs [data-job]', timeout=3000))
         mstep('Tech: open job', lambda: m.click('#jobs [data-job]'))
         mstep('Tech: items listed with actions', lambda: m.wait_for_selector('[data-act="Serviced"]', timeout=3000))

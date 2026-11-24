@@ -40,3 +40,9 @@ header button.link { color: #cfd8e3; }
 .finish { display: grid; gap: 8px; margin: 14px 0 30px; }
 .finish button { width: 100%; font-weight: 700; font-size: 17px; padding: 16px; border: 0; color: #fff; }
 .finish .go { background: #1e8e3e; } .finish .stop { background: #c0392b; } .finish .warn { background: #f2b705; color: #1f2933; }
+.big { font-size: 34px; font-weight: 700; line-height: 1; }
+.bar { background: #e4e7eb; border-radius: 6px; height: 10px; overflow: hidden; margin: 10px 0; }
+.bar i { display: block; height: 100%; background: #1e8e3e; }
+.day { display: flex; justify-content: space-between; align-items: center; }
+.day b { font-size: 17px; }
+.day .count { font-size: 22px; font-weight: 700; color: #1f6feb; }

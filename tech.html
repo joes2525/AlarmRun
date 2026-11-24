@@ -6,9 +6,9 @@
 <meta name="theme-color" content="#1f2933">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>AlarmRun – Inspector</title>
-<link rel="stylesheet" href="css/tech.css?v=2611241147">
+<link rel="stylesheet" href="css/tech.css?v=2611241153">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611241147"></script>
+<script src="config.js?v=2611241153"></script>
 </head>
 <body>
 <header>
@@ -27,7 +27,14 @@
   </form>
 </section>
 
+<section id="home" hidden>
+  <h2 id="hello" style="margin:6px 2px 2px"></h2>
+  <p class="muted" id="today" style="margin:0 2px 10px"></p>
+  <div id="homeBody"></div>
+</section>
+
 <section id="run" hidden>
+  <button class="link" id="toHome">← Home</button>
   <div class="daybar"><button id="prevDay">◀</button><h2 id="dayLabel"></h2><button id="nextDay">▶</button></div>
   <div id="jobs"></div>
 </section>
@@ -37,6 +44,6 @@
   <div id="jobBody"></div>
 </section>
 
-<script src="js/tech.js?v=2611241147"></script>
+<script src="js/tech.js?v=2611241153"></script>
 </body>
 </html>
