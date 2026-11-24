@@ -172,11 +172,11 @@ async function openSchedule() {
 }
 
 // Grouped table used by both Due and Ready to book
-// heading boxes: ticked if everything under them is ticked, dash if only some
+// heading boxes: ticked only if everything under them is ticked
 function syncHeads(el) {
   el.querySelectorAll('[data-group]').forEach(h => {
     const kids = [...el.querySelectorAll('.pick.' + h.dataset.group)], on = kids.filter(c => c.checked).length;
-    h.checked = kids.length > 0 && on === kids.length; h.indeterminate = on > 0 && on < kids.length;
+    h.checked = kids.length > 0 && on === kids.length; h.indeterminate = false;   // partly ticked headings stay empty
   });
 }
 function renderGrouped(rows, el, which, groupBy) {
