@@ -588,20 +588,23 @@ $('#msgStatus').onchange = loadMessages;
 $('#msgSections').onchange = e => {
   if (e.target.classList.contains('mall')) e.target.closest('table').querySelectorAll('.mpick').forEach(c => c.checked = e.target.checked);
 };
-// Button shows progress itself: "Sending…" → "Sent" for 3 seconds → back to its label
+// Progress shows as red text to the right of the bar's buttons: "Sending…" → "Sent" for 3 seconds → cleared
+const barNote = btn => { const bar = btn.parentElement; return bar.querySelector('.barNote') || bar.appendChild(Object.assign(document.createElement('span'), { className: 'barNote' })); };
+const note = (btn, t, keep) => { const n = barNote(btn); n.textContent = t; clearTimeout(n.timer); if (!keep) n.timer = setTimeout(() => n.textContent = '', 3000); };
 async function busy(btn, doing, done, fn) {
-  const label = btn.textContent; btn.disabled = true; btn.textContent = doing;
+  const btns = btn.parentElement.querySelectorAll('button'); btns.forEach(b => b.dataset.was = b.disabled), btns.forEach(b => b.disabled = true);
+  note(btn, doing, true);
   let ok = false;
   try { ok = await fn(); } catch (e) { msg(e.message); }
-  btn.textContent = ok ? done : 'Failed';
   await loadMessages();
-  setTimeout(() => { btn.textContent = label; btn.disabled = false; }, 3000);
+  btns.forEach(b => b.disabled = b.dataset.was === 'true');
+  note(btn, ok ? done : 'Failed – see the message at the top');
 }
 $('#msgSections').onclick = e => {
   const btn = e.target.closest('button[data-act]'); if (!btn || btn.disabled) return;
   const ch = btn.dataset.ch, act = btn.dataset.act;
   const ids = [...document.querySelectorAll(`#msgList-${ch} .mpick:checked`)].map(c => c.value);
-  if (!ids.length) { const t = btn.textContent; btn.textContent = 'Tick some first'; setTimeout(() => btn.textContent = t, 2000); return; }
+  if (!ids.length) return note(btn, 'Tick some first');
   if (act === 'print') return open('letter.html?ids=' + ids.join(','), '_blank');
   if (act === 'posted') return busy(btn, 'Saving…', 'Done', async () => {
     const { error } = await sb.from('messages').update({ status: 'sent', sent_at: new Date().toISOString() }).in('id', ids);

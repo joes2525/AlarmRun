@@ -118,9 +118,9 @@ def main():
         step('Open Admin menu', lambda: page.click('#adminToggle'))
         step('Mail table has a row', lambda: None if page.locator('#msgList-mail .mpick').count() == 1 else errors.append('Mail table empty'))
         step('Mark posted', lambda: (page.locator('#msgList-mail .mpick').check(), page.click('[data-act=posted]'), page.wait_for_timeout(300),
-             None if page.locator('[data-act=posted]').inner_text() == 'Done' else errors.append('Posted button did not show Done')))
+             None if 'Done' in page.inner_text('#msgSections') else errors.append('Posted button did not show Done')))
         step('Send email', lambda: (page.locator('#msgList-email .mpick').first.check(), page.click('[data-act=send][data-ch=email]'), page.wait_for_timeout(300),
-             None if page.locator('[data-act=send][data-ch=email]').inner_text() in ('Sending…', 'Sent') else errors.append('Send button text: ' + page.locator('[data-act=send][data-ch=email]').inner_text())))
+             None if 'Sent' in page.inner_text('#msgSections') or 'Sending' in page.inner_text('#msgSections') else errors.append('No Sent note')))
         step('Templates page', lambda: tab('templates'))
         step('Insert placeholder', lambda: page.locator('#tplChips button').first.click())
         step('SMS template shows counter', lambda: (page.select_option('#tplPick', 't2'), None if 'characters' in page.inner_text('#tplPrevSubject') else errors.append('SMS counter missing')))
