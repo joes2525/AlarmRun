@@ -497,7 +497,8 @@ $('#doMove').onclick = async () => {
   await actOnTicked({ inspector_id: dest.ins, scheduled_start: `${dest.day}T09:00:00` },
     n => `Moved ${n} to ${inspectors.find(i => i.id === dest.ins).name} on ${dest.day}`);
   await Promise.all([orderDay(dest.ins, dest.day), from.ins ? orderDay(from.ins, from.day) : null]);
-  openDay();
+  pick.ins = pick.day = ''; to.ins = to.day = null;   // clear blue and red so the next move starts fresh
+  drawWeek(); openDay();
 };
 $('#doUnbook').onclick = () => actOnTicked({ status: 'booked', inspector_id: null, scheduled_start: null, route_order: null }, n => `Unbooked ${n} – back in Ready to book`);
 $('#doCancel').onclick = () => {
