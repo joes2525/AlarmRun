@@ -89,8 +89,8 @@ async function openProperty(id) {
       <button>Save notes</button></form>
     <form id="breakdownForm"><input name="notes" placeholder="Breakdown details e.g. hallway alarm beeping" size="45" required><button>Log breakdown</button></form>
     <h3>Tenancies (${ten.length})</h3>
-    <table><tr><th>Tenants</th><th>Mobile</th><th>Email</th><th>Move in</th><th>Lease</th><th>Vacate</th><th>PM</th></tr>
-    ${ten.map(t => `<tr><td>${esc(t.tenant_names)}</td><td>${esc(t.mobile)}</td><td>${esc(t.email)}</td><td>${date(t.move_in)}</td>
+    <table><tr><th>Tenants</th><th>Mobile</th><th>Email</th><th>Notices by</th><th>Move in</th><th>Lease</th><th>Vacate</th><th>PM</th></tr>
+    ${ten.map(t => `<tr><td>${esc(t.tenant_names)}</td><td>${esc(t.mobile)}</td><td>${esc(t.email)}</td><td><select data-noticeby="${t.id}"><option value="email"${t.notice_by !== 'mail' ? ' selected' : ''}>Email</option><option value="mail"${t.notice_by === 'mail' ? ' selected' : ''}>Mail</option></select></td><td>${date(t.move_in)}</td>
       <td>${date(t.lease_start)} → ${leaseEnd(t.lease_end)}</td><td>${date(t.vacate_date)}</td><td>${esc(t.property_manager)}</td></tr>`).join('')}</table>
     <h3>Alarms (${alarms.length})</h3>
     <table><tr><th>Location</th><th>Type</th><th>Power</th><th>Brand</th><th>Expires</th></tr>
@@ -108,6 +108,10 @@ async function openProperty(id) {
     <table><tr><th>Date</th><th>Type</th><th>Status</th><th>Certificate</th><th>Notes</th></tr>
     ${jobs.map(j => { const c = j.certificates?.[0] || j.certificates; return `<tr><td>${date(j.scheduled_start)}</td><td>${esc(j.job_type)}</td><td>${esc(j.status)}</td>
       <td>${c?.number ? esc(c.number) + (c.compliant ? ' <span class=good>✓</span>' : ' <span class=bad>✗</span>') : ''}</td><td>${esc(j.notes)}</td></tr>`; }).join('')}</table>`;
+  $('#detailBody').querySelectorAll('[data-noticeby]').forEach(sel => sel.onchange = async () => {
+    const { error } = await sb.from('tenancies').update({ notice_by: sel.value }).eq('id', sel.dataset.noticeby);
+    msg(error ? error.message : `Entry notices for this tenancy will go by ${sel.value} (applies to new bookings)`);
+  });
   $('#propNotesForm').onsubmit = async e => {
     e.preventDefault();
     const { error } = await sb.from('properties').update({ notes: e.target.notes.value || null }).eq('id', id);
@@ -504,10 +508,14 @@ async function loadMessages() {
   msgTicked.clear();
   const kind = { entry_notice: 'Entry notice', entry_notice_changed: 'Entry notice – date changed', reminder: 'Reminder' };
   $('#msgInfo').textContent = `${data.length} message${data.length === 1 ? '' : 's'}`;
-  $('#msgList').innerHTML = '<tr><th><input type="checkbox" id="msgAll"></th><th>Send (Qld time)</th><th>Visit</th><th>To / subject</th><th>Message</th></tr>' +
-    data.map(m => `<tr class="prow"><td><input type="checkbox" class="mpick" value="${m.id}"></td><td>${new Date(m.send_after).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td><td>${date(m.for_date)}</td>
-      <td style="white-space:normal;width:22%"><b>${esc(m.to_name)}</b> <small>${esc(m.to_address || '— no email')}</small><br>
-        ${esc(m.properties?.address_line)}, ${esc(m.properties?.suburb)} – ${m.channel === 'sms' ? '💬 Text' : '✉ Email'}: ${kind[m.kind] || esc(m.kind)}${m.error ? `<br><small class="bad">${esc(m.error)}</small>` : ''}</td>
+  const type = { email: '✉ Email', sms: '💬 Text', mail: '📮 Mail' };
+  $('#msgList').innerHTML = '<tr><th><input type="checkbox" id="msgAll"></th><th>Send (Qld time)</th><th>Type</th><th>To / subject</th><th>Message</th></tr>' +
+    data.map(m => `<tr class="prow"><td><input type="checkbox" class="mpick" value="${m.id}" data-ch="${m.channel}"></td>
+      <td>${m.channel === 'mail' ? (m.status === 'sent' ? 'Posted' : 'Print & post now') : new Date(m.send_after).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td>
+      <td>${type[m.channel] || esc(m.channel)}</td>
+      <td style="white-space:normal;width:22%"><b>${esc(m.to_name)}</b> <small>${esc(m.to_address || '— none')}</small><br>
+        ${esc(m.properties?.address_line)}, ${esc(m.properties?.suburb)} – ${kind[m.kind] || esc(m.kind)}${m.error ? `<br><small class="bad">${esc(m.error)}</small>` : ''}
+        ${m.channel === 'mail' && m.status === 'queued' ? `<br><a href="letter.html?ids=${m.id}" target="_blank">Print letter</a> · <a href="#" data-posted="${m.id}">Mark posted</a>` : ''}</td>
       <td style="white-space:pre-wrap;font-size:13px">${esc(m.body)}</td></tr>`).join('');
 }
 $('#msgStatus').onchange = loadMessages;
@@ -525,6 +533,17 @@ $('#msgNow').onclick = async () => {
   if (!msgTicked.size) return msg('Tick some messages first');
   const { error } = await sb.from('messages').update({ send_after: new Date().toISOString(), status: 'queued', error: null }).in('id', [...msgTicked]);
   msg(error ? error.message : `${msgTicked.size} set to send now (they'll go once a sending service is connected)`); loadMessages();
+};
+$('#msgList').addEventListener('click', async e => {
+  const id = e.target.dataset.posted; if (!id) return;
+  e.preventDefault();
+  const { error } = await sb.from('messages').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', id);
+  msg(error ? error.message : 'Marked as posted'); loadMessages();
+});
+$('#msgPrint').onclick = () => {
+  const ids = [...document.querySelectorAll('.mpick:checked')].filter(c => c.dataset.ch === 'mail').map(c => c.value);
+  if (!ids.length) return msg('Tick some 📮 Mail messages first');
+  open('letter.html?ids=' + ids.join(','), '_blank');
 };
 $('#msgCancel').onclick = () => setMsgStatus('cancelled', 'Cancelled');
 $('#msgRequeue').onclick = () => setMsgStatus('queued', 'Re-queued');

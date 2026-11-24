@@ -25,7 +25,8 @@ window.__DATA = {
            certificates: [{ number: 'AASA-00001', compliant: true, issued_at: '%DAY%T05:00:00Z' }],
            alarm_checks: [{ action: 'Serviced', alarms: { location: 'Hallway', sensor_type: 'Photoelectric', power_source: 'hardwired', manufacture_date: '2021-03-01', expiry_date: '2031-03-01' } },
                           { action: 'Replaced', replace_reason: 'Broken', quote: 'Upgrade', photo_path: 'c1/j1/a.jpg', alarms: { location: 'Bedroom 1', sensor_type: 'Photoelectric', power_source: '10yr_lithium', manufacture_date: '2026-06-01', expiry_date: '2036-06-01' } }] }],
-  messages: [{ id: 'm1', kind: 'entry_notice', to_name: 'Sam', to_address: 's@x.com', subject: 'Entry notice', body: 'Hi {x}', for_date: '%DAY%', send_after: '%DAY%T09:00:00Z', status: 'queued', properties: { address_line: '3 Test St', suburb: 'COOMERA' } }],
+  messages: [{ id: 'm2', company_id: 'c1', kind: 'entry_notice', channel: 'mail', to_name: 'Sam', to_address: '3 Test St, COOMERA QLD 4209', subject: 'Entry notice', body: 'Hi Sam', for_date: '%DAY%', send_after: '%DAY%T09:00:00Z', status: 'queued', properties: { address_line: '3 Test St', suburb: 'COOMERA' } },
+    { id: 'm1', kind: 'entry_notice', to_name: 'Sam', to_address: 's@x.com', subject: 'Entry notice', body: 'Hi {x}', for_date: '%DAY%', send_after: '%DAY%T09:00:00Z', status: 'queued', properties: { address_line: '3 Test St', suburb: 'COOMERA' } }],
   notice_alerts: [{ job_id: 'j1', visit: '%DAY%', inspector: 'Liam', address_line: '3 Test St', suburb: 'COOMERA', problem: 'No entry notice for this visit date' }],
   alarms: [{ id: 'a1', location: 'Hallway', storey: 1, sensor_type: 'photoelectric', power_source: 'hardwired', brand: 'Clipsal', expiry_date: '2030-01-01' },
            { id: 'a2', location: 'Bedroom 1', storey: 1, sensor_type: 'photoelectric', power_source: '9v', brand: 'Brooks', expiry_date: '2020-01-01' }],
@@ -109,6 +110,8 @@ def main():
         step('Approve saved', lambda: None if page.evaluate("__CALLS.some(c => c[0]==='jobs' && c[1]==='update')") else errors.append('Approve: no update sent'))
         step('Messages page', lambda: tab('messages'))
         step('Open Admin menu', lambda: page.click('#adminToggle'))
+        step('Mail row has print + posted', lambda: None if page.locator('#msgList [data-posted]').count() == 1 else errors.append('Mail actions missing'))
+        step('Mark posted', lambda: page.click('#msgList [data-posted]'))
         step('Templates page', lambda: tab('templates'))
         step('Insert placeholder', lambda: page.locator('#tplChips button').first.click())
         step('SMS template shows counter', lambda: (page.select_option('#tplPick', 't2'), None if 'characters' in page.inner_text('#tplPrevSubject') else errors.append('SMS counter missing')))
@@ -127,6 +130,14 @@ def main():
         step('Certificate shows photos', lambda: None if c.locator('.pics img').count() == 1 else errors.append('Certificate photos missing'))
         step('Certificate renders', lambda: None if 'COMPLIANT' in c.inner_text('#cert') and 'AASA-00001' in c.inner_text('#cert') else errors.append('Certificate did not render'))
         c.screenshot(path='/tmp/cert-preview.png', full_page=True)
+
+        lt = b.new_page()
+        lt.on('pageerror', lambda e: errors.append(f'letter pageerror: {e}'))
+        lt.route('**/supabase-js@2', lambda r: r.fulfill(body='', content_type='text/javascript'))
+        lt.route('**/config.js*', lambda r: r.fulfill(body="window.SUPABASE_URL='x';window.SUPABASE_KEY='y';", content_type='text/javascript'))
+        lt.add_init_script(FAKE.replace('%DAY%', day(1)))
+        lt.goto(url.replace('index.html', 'letter.html?ids=m2')); lt.wait_for_timeout(500)
+        step('Letter renders', lambda: None if lt.locator('.letter').count() == 1 and 'COOMERA' in lt.inner_text('.letter .to') else errors.append('Letter did not render'))
 
         # ---- inspector phone app ----
         m = b.new_page(viewport={'width': 390, 'height': 844})

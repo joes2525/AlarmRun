@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
-<link rel="stylesheet" href="css/app.css?v=2611241123">
+<link rel="stylesheet" href="css/app.css?v=2611241140">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611241123"></script>
+<script src="config.js?v=2611241140"></script>
 </head>
 <body>
 <h1>AlarmRun – Office</h1>
@@ -178,12 +178,13 @@
 
   <div id="tab-messages" class="tab hidden">
     <h2>Messages</h2>
-    <p style="margin:0;color:#555">Automated emails and texts go out in two batches a day, 7am and 7pm Queensland time. <b>Nothing is sent yet</b> – no sending service is connected.</p>
+    <p style="margin:0;color:#555">Emails and texts go out in two batches a day, 7am and 7pm Queensland time. Letters (📮) need printing and posting – tick them and click Print, then Mark posted. <b>Nothing is sent yet</b> – no sending service is connected.</p>
     <div class="bar">
       <select id="msgStatus"><option value="queued">Queued</option><option value="failed">Problems</option><option value="sent">Sent</option><option value="cancelled">Cancelled</option><option value="">All</option></select>
-      <select id="msgChannel"><option value="">Emails & texts</option><option value="email">Emails</option><option value="sms">Texts</option></select>
+      <select id="msgChannel"><option value="">Emails & texts</option><option value="email">Emails</option><option value="sms">Texts</option><option value="mail">Mail</option></select>
       <span id="msgInfo"></span>
       <button type="button" id="msgNow" class="primary">Send now</button>
+      <button type="button" id="msgPrint">Print ticked letters</button>
       <button type="button" id="msgCancel">Cancel ticked</button>
       <button type="button" id="msgRequeue">Re-queue ticked</button>
     </div>
@@ -265,6 +266,6 @@
   </main>
 </section>
 
-<script src="js/app.js?v=2611241123"></script>
+<script src="js/app.js?v=2611241140"></script>
 </body>
 </html>
