@@ -599,7 +599,7 @@ $('#msgNow').onclick = async () => {
   const { error } = await sb.from('messages').update({ send_after: new Date().toISOString(), status: 'queued', error: null }).in('id', [...msgTicked]);
   if (error) return msg(error.message);
   msg('Sending…');
-  const { data, error: fnErr } = await sb.functions.invoke('send-messages');   // texts and letters are skipped for now
+  const { data, error: fnErr } = await sb.functions.invoke('Send-messages')   // function slug as created in Supabase (case-sensitive);   // texts and letters are skipped for now
   msg(fnErr ? 'Sender not set up yet: ' + fnErr.message : `Emails sent: ${data.sent}, failed: ${data.failed}` + (data.failed ? ' – see the message for the reason' : ''));
   loadMessages();
 };
