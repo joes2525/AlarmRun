@@ -73,3 +73,4 @@ table.avail td.on{background:#d6f5dc;color:#1e8e3e} table.avail td.off{backgroun
 aside .submenu[hidden]{display:none}
 .pxgrid td.gst{color:#52606d;width:90px!important}
 table.avail{width:auto} table.avail td,table.avail th{padding:3px 4px!important;min-width:0!important;font-size:12px} table.avail th small{font-size:11px}
+table.avail td,table.avail th{width:auto!important}
