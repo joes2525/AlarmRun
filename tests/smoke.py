@@ -185,6 +185,17 @@ def main():
             if not ok: errors.append(f'Tech: wrong data sent {a}')
         mstep('Tech: complete_job sent right data', check_rpc)
         mstep('Tech: back to run', lambda: m.wait_for_selector('#run:not([hidden])', timeout=3000))
+        def edit_completed():
+            m.evaluate("__DATA.jobs[0].status='completed'; __DATA.jobs[0].approved_at=null; __DATA.jobs[0].alarm_checks=[{alarm_id:'a1',action:'Serviced',quote:null}]")
+            m.click('#jobs [data-job]'); m.wait_for_selector('[data-finish="compliant"]', timeout=3000)
+            if 'make changes' not in m.inner_text('#jobBody'): errors.append('Tech: edit banner missing')
+            if 'on' not in (m.get_attribute('[data-i="0"][data-act="Serviced"]', 'class') or ''): errors.append('Tech: earlier answer not filled in')
+        mstep('Tech: completed job reopens for editing', edit_completed)
+        def approved_readonly():
+            m.evaluate("__DATA.jobs[0].approved_at='2026-01-01'"); m.go_back(); m.wait_for_timeout(300)
+            m.click('#jobs [data-job]'); m.wait_for_timeout(500)
+            if 'approved by the office' not in m.inner_text('#jobBody'): errors.append('Tech: approved job not read-only')
+        mstep('Tech: approved job is read-only', approved_readonly)
         b.close()
     srv.shutdown()
     print('\n' + ('\n'.join(errors) if errors else 'ALL PASSED'))

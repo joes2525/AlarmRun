@@ -80,7 +80,7 @@ async function loadRun() {
   show('run'); msg('');
   $('#dayLabel').textContent = day === iso(new Date()) ? 'Today' : niceDate(day);
   const { data, error } = await sb.from('jobs')
-    .select('id,job_type,status,route_order,notes,property_id,properties(id,address_line,suburb,postcode,access_notes,clients(name))')
+    .select('id,job_type,status,route_order,notes,approved_at,property_id,properties(id,address_line,suburb,postcode,access_notes,clients(name))')
     .eq('inspector_id', inspectorId).gte('scheduled_start', day + 'T00:00').lte('scheduled_start', day + 'T23:59')
     .in('status', ['booked', 'in_progress', 'completed', 'no_access']).order('route_order', { nullsFirst: false });
   if (error) return msg(error.message);
@@ -91,7 +91,7 @@ async function loadRun() {
     return `<div class="card ${done ? 'done' : ''}" data-job="${j.id}">
       <h3><span class="num">${i + 1}</span>${esc(p.address_line)}</h3>
       <div class="muted">${esc(p.suburb)} ${esc(p.postcode)} · ${esc(p.clients?.name)}
-        <span class="tag">${label[j.job_type] || esc(j.job_type)}</span>${done ? `<span class="tag">${j.status === 'completed' ? '✓ done' : 'no access'}</span>` : ''}</div>
+        <span class="tag">${label[j.job_type] || esc(j.job_type)}</span>${done ? `<span class="tag">${j.status === 'completed' ? (j.approved_at ? '✓ approved' : '✓ done – tap to edit') : 'no access'}</span>` : ''}</div>
       ${j.notes ? `<div style="margin-top:6px">${esc(j.notes)}</div>` : ''}
       ${p.access_notes ? `<div class="muted" style="margin-top:4px">${esc(p.access_notes)}</div>` : ''}
     </div>`;
@@ -152,21 +152,34 @@ async function openJob(id, push = true) {
   show('job'); msg(''); $('#jobBody').innerHTML = '<p class="muted">Loading…</p>'; scrollTo(0, 0);
   await loadLists();
   const { data: j, error } = await sb.from('jobs')
-    .select('id,job_type,status,locked,notes,property_id,properties(address_line,suburb,postcode,access_notes,notes,storeys,bedrooms,ceiling_access,clients(name,notes))').eq('id', id).single();
+    .select(`id,job_type,status,locked,approved_at,notes,property_id,outcome,outcome_notes,comment_photo,blind_cleats,blind_cleats_needed,safety_switch,safety_switch_notes,
+      properties(address_line,suburb,postcode,access_notes,notes,storeys,bedrooms,ceiling_access,clients(name,notes)),
+      alarm_checks(alarm_id,action,replace_reason,quote,photo_path)`).eq('id', id).single();
   if (error) return msg(error.message);
+  const prev = {}; (j.alarm_checks || []).forEach(c => prev[c.alarm_id] = c);   // answers from an earlier save
+  const ids = Object.keys(prev);
   const [{ data: alarms }, { data: ten }] = await Promise.all([
-    sb.from('alarms').select('id,location,sensor_type,power_source,brand,manufacture_date,expiry_date').eq('property_id', j.property_id).eq('active', true).order('location'),
+    sb.from('alarms').select('id,location,sensor_type,power_source,brand,manufacture_date,expiry_date')
+      .eq('property_id', j.property_id).or(`active.eq.true${ids.length ? `,id.in.(${ids.join(',')})` : ''}`).order('location'),
     sb.from('tenancies').select('tenant_names,mobile,email,notes').eq('property_id', j.property_id).order('lease_start', { ascending: false, nullsFirst: false }).limit(1)]);
   const p = j.properties || {};
-  job = { ...j, tenant: ten?.[0] || {}, extra: { ceiling_access: p.ceiling_access || '', storeys: p.storeys || '', bedrooms: p.bedrooms || '' },
-    items: (alarms || []).map(a => ({ alarm_id: a.id, location: a.location, device_type: cap(a.sensor_type), manufacture_date: a.manufacture_date,
-      expiry_date: a.expiry_date, brand: a.brand, power_source: a.power_source, action: '', quote: '' })) };
+  job = { ...j, tenant: ten?.[0] || {},
+    extra: { ceiling_access: p.ceiling_access || '', storeys: p.storeys || '', bedrooms: p.bedrooms || '',
+      blind_cleats: j.blind_cleats || '', blind_cleats_needed: j.blind_cleats_needed || '', safety_switch: j.safety_switch || '',
+      safety_switch_notes: j.safety_switch_notes || '', comment: j.outcome_notes || '', comment_photo: j.comment_photo || '' },
+    items: (alarms || []).map(a => { const c = prev[a.id] || {};
+      return { alarm_id: a.id, location: a.location, device_type: cap(a.sensor_type), manufacture_date: a.manufacture_date,
+        expiry_date: a.expiry_date, brand: a.brand, power_source: a.power_source, action: c.action || '', quote: c.quote || '',
+        replace_reason: c.replace_reason || '', photo_path: c.photo_path || '',
+        new_type: c.action === 'Replaced' ? cap(a.sensor_type) : '', new_date: c.action === 'Replaced' ? a.manufacture_date : '' }; }) };
   renderJob();
 }
 const cap = s => s ? s[0].toUpperCase() + s.slice(1) : '';
 
 function renderJob() {
-  const p = job.properties || {}, t = job.tenant, done = job.locked || job.status !== 'booked', x = job.extra;
+  const p = job.properties || {}, t = job.tenant, x = job.extra;
+  const editing = job.status === 'completed' && !job.approved_at && !job.locked;
+  const done = !editing && (job.locked || !['booked', 'in_progress'].includes(job.status));
   const addr = encodeURIComponent(`${p.address_line}, ${p.suburb} QLD ${p.postcode || ''}`);
   const notes = [['Agent', p.clients?.notes], ['Property', p.notes], ['Keys / access', p.access_notes], ['Tenant', t.notes], ['Job', job.notes]].filter(n => n[1]);
   $('#jobBody').innerHTML = `
@@ -179,7 +192,8 @@ function renderJob() {
       </div>
     </div>
     <div class="card"><h3>Notes</h3>${notes.length ? notes.map(([k, v]) => `<p style="margin:6px 0"><b>${k}:</b> ${esc(v)}</p>`).join('') : '<p class="muted">No notes for this property.</p>'}</div>
-    ${done ? `<div class="card">This job is ${esc(job.status.replace('_', ' '))}${job.locked ? ' and locked' : ''}.</div>` : `
+    ${done ? `<div class="card">${job.approved_at ? '✓ This inspection has been approved by the office and can no longer be changed.' : `This job is ${esc(job.status.replace('_', ' '))}.`}</div>` : `
+    ${editing ? `<div class="card" style="background:#e3f0ff">✓ Completed (${job.outcome === 'compliant' ? 'compliant' : 'non-compliant'}). You can still make changes until the office approves it.</div>` : ''}
     <h3>Alarms & devices (${job.items.length})</h3>
     ${job.items.map(itemCard).join('')}
     <div class="card" id="addBox">${job.adding ? addForm() : '<button class="primary" id="addOpen" style="background:#323f4b">➕ Add</button>'}</div>
@@ -294,7 +308,7 @@ async function finish(outcome, btn) {
   const { data: cert, error } = await sb.rpc('complete_job', { p_job: job.id, p_items: items, p_outcome: outcome, p_extra: job.extra });
   btn.disabled = false;
   if (error) return msg(error.message);
-  alert(`Done ✓ Certificate ${cert} (${outcome === 'compliant' ? 'compliant' : 'NOT compliant'})`);
+  alert(`${job.status === 'completed' ? 'Changes saved' : 'Done'} ✓ Certificate ${cert} (${outcome === 'compliant' ? 'compliant' : 'NOT compliant'})`);
   backToRun();
 }
 
