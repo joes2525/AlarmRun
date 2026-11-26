@@ -158,7 +158,7 @@ def main():
         m.on('dialog', lambda d: d.accept('No one home') if d.type == 'prompt' else d.accept())
         m.route('**/supabase-js@2', lambda r: r.fulfill(body='', content_type='text/javascript'))
         m.route('**/config.js*', lambda r: r.fulfill(body="window.SUPABASE_URL='x';window.SUPABASE_KEY='y';", content_type='text/javascript'))
-        m.add_init_script(FAKE.replace('%DAY%', day(1)))
+        m.add_init_script(FAKE.replace('%DAY%', (dt.date.today()+dt.timedelta(days=1)).isoformat()))
         m.goto(url.replace('index.html', 'tech.html')); m.wait_for_timeout(600)
         def mstep(name, fn):
             before = len(errors)
