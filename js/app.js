@@ -90,7 +90,7 @@ async function openProperty(id) {
     <form id="breakdownForm"><input name="notes" placeholder="Breakdown details e.g. hallway alarm beeping" size="45" required><button>Log breakdown</button></form>
     <h3>Tenancies (${ten.length})</h3>
     <table><tr><th>Tenants</th><th>Mobile</th><th>Email</th><th>Notices by</th><th>Move in</th><th>Lease</th><th>Vacate</th><th>PM</th></tr>
-    ${ten.map(t => `<tr><td>${esc(t.tenant_names)}</td><td>${esc(t.mobile)}</td><td>${esc(t.email)}</td><td><select data-noticeby="${t.id}"><option value="email"${t.notice_by !== 'mail' ? ' selected' : ''}>Email</option><option value="mail"${t.notice_by === 'mail' ? ' selected' : ''}>Mail</option></select></td><td>${date(t.move_in)}</td>
+    ${ten.map(t => `<tr><td>${esc(t.tenant_names)}${t.owner_occupied ? ' <span class="tag">Owner occupied</span>' : ''}</td><td>${esc(t.mobile)}</td><td>${esc(t.email)}</td><td><select data-noticeby="${t.id}"><option value="email"${t.notice_by !== 'mail' ? ' selected' : ''}>Email</option><option value="mail"${t.notice_by === 'mail' ? ' selected' : ''}>Mail</option></select></td><td>${date(t.move_in)}</td>
       <td>${date(t.lease_start)} → ${leaseEnd(t.lease_end)}</td><td>${date(t.vacate_date)}</td><td>${esc(t.property_manager)}</td></tr>`).join('')}</table>
     <form id="tenForm">
       <input name="tenant_names" placeholder="Tenant name(s)" required>
@@ -98,6 +98,7 @@ async function openProperty(id) {
       <input name="email" type="email" placeholder="Email">
       <label>Lease start <input name="lease_start" type="date"></label>
       <label>Lease end <input name="lease_end" type="date"></label>
+      <label><input name="owner_occupied" type="checkbox" value="true" style="width:auto"> Owner occupied</label>
       <button>Add tenancy</button>
     </form>
     <h3>Alarms (${alarms.length})</h3>
