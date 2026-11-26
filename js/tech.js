@@ -84,7 +84,7 @@ async function loadRun() {
     .eq('inspector_id', inspectorId).gte('scheduled_start', day + 'T00:00').lte('scheduled_start', day + 'T23:59')
     .in('status', ['booked', 'in_progress', 'completed', 'no_access']).order('route_order', { nullsFirst: false });
   if (error) return msg(error.message);
-  const label = { callout: 'Breakdown', annual: 'Annual', pre_tenancy: 'Lease', install: 'Install' };
+  const label = { callout: 'Breakdown', annual: 'Annual', pre_tenancy: 'Lease', sale: 'Sale', install: 'Install', work_order: 'Work order', upgrade: 'Upgrade' };
   const left = data.filter(j => ['booked', 'in_progress'].includes(j.status)).length;
   $('#jobs').innerHTML = `<p class="muted">${data.length} jobs · ${left} to do</p>` + (data.map((j, i) => {
     const p = j.properties || {}, done = !['booked', 'in_progress'].includes(j.status);

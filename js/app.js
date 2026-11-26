@@ -100,7 +100,8 @@ async function openProperty(id) {
     <form id="propNotesForm" style="display:block"><b>Property notes for inspectors</b><br>
       <textarea name="notes" rows="2" style="width:100%;box-sizing:border-box">${esc(p.notes || '')}</textarea>
       <button>Save notes</button></form>
-    <form id="breakdownForm"><input name="notes" placeholder="Breakdown details e.g. hallway alarm beeping" size="45" required><button>Log breakdown</button></form>
+    <form id="breakdownForm"><select name="job_type"><option value="callout">Breakdown</option><option value="work_order">Work order</option><option value="upgrade">Upgrade</option><option value="pre_tenancy">Lease</option><option value="sale">Sale</option><option value="install">Install</option></select>
+      <input name="notes" placeholder="Details e.g. hallway alarm beeping" size="45" required><button>Log job</button></form>
     <h3>Tenancies (${ten.length})</h3>
     <table><tr><th>Tenants</th><th>Mobile</th><th>Email</th><th>Notices by</th><th>Move in</th><th>Lease</th><th>Vacate</th><th>PM</th></tr>
     ${ten.map(t => `<tr><td>${esc(t.tenant_names)}${t.owner_occupied ? ' <span class="tag">Owner occupied</span>' : ''}</td><td>${esc(t.mobile)}</td><td>${esc(t.email)}</td><td><select data-noticeby="${t.id}"><option value="email"${t.notice_by !== 'mail' ? ' selected' : ''}>Email</option><option value="mail"${t.notice_by === 'mail' ? ' selected' : ''}>Mail</option></select></td><td>${date(t.move_in)}</td>
@@ -149,9 +150,9 @@ async function openProperty(id) {
   };
   $('#breakdownForm').onsubmit = async e => {
     e.preventDefault();
-    const { error } = await sb.from('jobs').insert({ company_id: companyId, property_id: id, job_type: 'callout', status: 'to_book', notes: e.target.notes.value });
+    const { error } = await sb.from('jobs').insert({ company_id: companyId, property_id: id, job_type: e.target.job_type.value, status: 'to_book', notes: e.target.notes.value });
     if (error) return msg(error.message);
-    msg('Breakdown logged – it is now in Schedule'); openProperty(id);
+    msg('Job logged – it is now on Due'); openProperty(id);
   };
   $('#tenForm').onsubmit = async e => {
     e.preventDefault();
@@ -323,8 +324,8 @@ async function renderReady() {
     .select('id,property_id,job_type,status,scheduled_start,notes,properties(address_line,suburb,postcode,clients(name))')
     .is('inspector_id', null).in('status', ['to_book', 'booked']).limit(2000);
   if (error) return msg(error.message);
-  const label = { callout: 'Breakdown', annual: 'Annual', pre_tenancy: 'Lease', sale: 'Sale', install: 'Install' };
-  const unassigned = data.filter(j => !(j.job_type === 'callout' && j.status === 'to_book'))   // logged breakdowns live on Due
+  const label = { callout: 'Breakdown', annual: 'Annual', pre_tenancy: 'Lease', sale: 'Sale', install: 'Install', work_order: 'Work order', upgrade: 'Upgrade' };
+  const unassigned = data.filter(j => j.status !== 'to_book')   // logged jobs live on Due
     .map(j => ({ reason: label[j.job_type] || 'Other', property_id: j.property_id, job_id: j.id,
       address_line: j.properties?.address_line || '', suburb: j.properties?.suburb || '', postcode: j.properties?.postcode,
       agency: j.properties?.clients?.name, area: areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || 'No area',
@@ -497,7 +498,7 @@ async function openDay() {
     .in('status', ['booked', 'in_progress']).order('route_order');
   if (error) return msg(error.message);
   const nice = new Date(day + 'T00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' });
-  const label = { callout: 'Breakdown', annual: 'Annual', pre_tenancy: 'Lease' };
+  const label = { callout: 'Breakdown', annual: 'Annual', pre_tenancy: 'Lease', sale: 'Sale', install: 'Install', work_order: 'Work order', upgrade: 'Upgrade' };
   if (tab === 'scheduled') {
     const rows = data.map(j => ({ job_id: j.id, property_id: null, address_line: j.properties?.address_line || '', suburb: j.properties?.suburb || '',
       agency: j.properties?.clients?.name || 'No agent', area: areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || 'No area',
