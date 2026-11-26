@@ -92,6 +92,14 @@ async function openProperty(id) {
     <table><tr><th>Tenants</th><th>Mobile</th><th>Email</th><th>Notices by</th><th>Move in</th><th>Lease</th><th>Vacate</th><th>PM</th></tr>
     ${ten.map(t => `<tr><td>${esc(t.tenant_names)}</td><td>${esc(t.mobile)}</td><td>${esc(t.email)}</td><td><select data-noticeby="${t.id}"><option value="email"${t.notice_by !== 'mail' ? ' selected' : ''}>Email</option><option value="mail"${t.notice_by === 'mail' ? ' selected' : ''}>Mail</option></select></td><td>${date(t.move_in)}</td>
       <td>${date(t.lease_start)} → ${leaseEnd(t.lease_end)}</td><td>${date(t.vacate_date)}</td><td>${esc(t.property_manager)}</td></tr>`).join('')}</table>
+    <form id="tenForm">
+      <input name="tenant_names" placeholder="Tenant name(s)" required>
+      <input name="mobile" placeholder="Mobile">
+      <input name="email" type="email" placeholder="Email">
+      <label>Lease start <input name="lease_start" type="date"></label>
+      <label>Lease end <input name="lease_end" type="date"></label>
+      <button>Add tenancy</button>
+    </form>
     <h3>Alarms (${alarms.length})</h3>
     <table><tr><th>Location</th><th>Type</th><th>Power</th><th>Brand</th><th>Expires</th></tr>
     ${alarms.map(a => `<tr><td>${esc(a.location)}</td><td>${esc(a.sensor_type)}</td><td>${esc(a.power_source)}</td><td>${esc(a.brand)}</td>
@@ -122,6 +130,14 @@ async function openProperty(id) {
     const { error } = await sb.from('jobs').insert({ company_id: companyId, property_id: id, job_type: 'callout', status: 'to_book', notes: e.target.notes.value });
     if (error) return msg(error.message);
     msg('Breakdown logged – it is now in Schedule'); openProperty(id);
+  };
+  $('#tenForm').onsubmit = async e => {
+    e.preventDefault();
+    const row = { company_id: companyId, property_id: id };
+    for (const [k, v] of new FormData(e.target)) if (v !== '') row[k] = v;
+    const { error } = await sb.from('tenancies').insert(row);
+    if (error) return msg(error.message);
+    msg('Tenancy added'); openProperty(id);
   };
   $('#alarmForm').onsubmit = async e => {
     e.preventDefault();
@@ -972,10 +988,38 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   if (tab === 'settings') { $('#listArea').classList.add('hidden'); return loadCompany(); }
   if (tab === 'docs') { $('#tab-templates').classList.remove('hidden'); $('#listArea').classList.add('hidden'); return loadTemplates(); }
   if (tab === 'templates') { $('#listArea').classList.add('hidden'); return loadTemplates(); }
+  if (tab === 'documents') { $('#listArea').classList.add('hidden'); docPage = 0; return loadDocs(); }
   if (tab === 'messages') { $('#listArea').classList.add('hidden'); return loadMessages(); }
   if (['due', 'book', 'scheduled'].includes(tab)) { $('#listArea').classList.add('hidden'); return openSchedule(); }
   $('#back').onclick();
 });
+// Documents: certificates + invoices together, newest first, 10 per page
+const DOCS = 10; let docPage = 0;
+async function loadDocs() {
+  const type = $('#docType').value, t = $('#docSearch').value.trim(), n = (docPage + 1) * DOCS;
+  const cq = sb.from('certificates').select('job_id,number,compliant,issued_at,jobs(properties(address_line,suburb))', { count: 'exact' }).order('issued_at', { ascending: false }).limit(n);
+  const iq = sb.from('invoices').select('number,amount_ex_gst,gst,status,created_at,clients(name)', { count: 'exact' }).order('created_at', { ascending: false }).limit(n);
+  if (t) { cq.ilike('number', `%${t}%`); iq.ilike('number', `%${t}%`); }
+  const none = { data: [], count: 0 };
+  const [c, i] = await Promise.all([type === 'inv' ? none : cq, type === 'cert' ? none : iq]);
+  if (c.error || i.error) return msg((c.error || i.error).message);
+  const rows = [...c.data.map(r => ({ d: r.issued_at, type: 'Certificate', num: r.number, who: [r.jobs?.properties?.address_line, r.jobs?.properties?.suburb].filter(Boolean).join(', '),
+      info: r.compliant ? '<span class=good>Compliant</span>' : '<span class=bad>Non-compliant</span>', link: `cert.html?job=${r.job_id}` })),
+    ...i.data.map(r => ({ d: r.created_at, type: 'Invoice', num: r.number, who: r.clients?.name || '',
+      info: `${money(Number(r.amount_ex_gst) + Number(r.gst || 0))} inc GST · ${esc(r.status)}` }))]
+    .sort((a, b) => String(b.d).localeCompare(String(a.d))).slice(docPage * DOCS, n);
+  const total = (c.count || 0) + (i.count || 0), pages = Math.max(1, Math.ceil(total / DOCS));
+  $('#docInfo').textContent = ` Page ${docPage + 1} of ${pages} (${total}) `;
+  $('#docPrev').disabled = docPage === 0; $('#docNext').disabled = docPage + 1 >= pages;
+  $('#docList').innerHTML = '<tr><th>Date</th><th>Type</th><th>Number</th><th>Property / client</th><th>Details</th><th></th></tr>' +
+    rows.map(r => `<tr><td>${date(r.d)}</td><td>${r.type}</td><td>${esc(r.num)}</td><td>${esc(r.who)}</td><td>${r.info}</td>
+      <td>${r.link ? `<a href="${r.link}" target="_blank">Open</a>` : ''}</td></tr>`).join('');
+}
+$('#docType').onchange = () => { docPage = 0; loadDocs(); };
+let docTimer; $('#docSearch').oninput = () => { clearTimeout(docTimer); docTimer = setTimeout(() => { docPage = 0; loadDocs(); }, 300); };
+$('#docPrev').onclick = () => { docPage--; loadDocs(); };
+$('#docNext').onclick = () => { docPage++; loadDocs(); };
+
 $('#logout').onclick = async () => { await sb.auth.signOut(); show('login'); };
 
 start();

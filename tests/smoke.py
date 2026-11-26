@@ -128,7 +128,8 @@ def main():
         step('Settings page', lambda: tab('settings'))
         step('Prices page', lambda: (tab('prices'), page.wait_for_selector('#pxLists input[data-f="price"]', timeout=2000)))
         step('Edit a price and save', lambda: (page.fill('#pxLists input[data-f="price"]', '90'), page.click('#pxSave')))
-        for t in ['clients', 'properties', 'tenants', 'jobs', 'certificates', 'invoices', 'inspectors']:
+        step('Documents page', lambda: (tab('documents'), page.wait_for_selector('#docList th', timeout=3000)))
+        for t in ['clients', 'properties', 'inspectors']:
             step(f'{t} list', lambda t=t: tab(t))
         step('Availability grid toggles', lambda: (page.wait_for_selector('#availGrid td[data-day]', timeout=2000), page.locator('#availGrid td[data-day]').first.click(),
              None if page.locator('#availGrid td.off').count() >= 17 else errors.append('Availability toggle failed')))

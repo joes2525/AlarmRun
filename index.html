@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap">
-<link rel="stylesheet" href="css/app.css?v=2611261535">
+<link rel="stylesheet" href="css/app.css?v=2611261624">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611261535"></script>
+<script src="config.js?v=2611261624"></script>
 </head>
 <body>
 <h1>AlarmRun – Office</h1>
@@ -40,14 +40,12 @@
     <button data-tab="scheduled">Scheduled</button>
     <button data-tab="completed">Completed</button>
     <button data-tab="messages">Messages</button>
-    <button data-tab="clients">Clients</button>
     <button data-tab="properties">Properties</button>
-    <button data-tab="tenants">Tenants</button>
-    <button data-tab="jobs">Jobs</button>
-    <button data-tab="certificates">Certificates</button>
-    <button data-tab="invoices">Invoices</button>
+    <button data-tab="documents">Documents</button>
+    <button data-tab="tenants" hidden>Tenants</button>
     <button type="button" id="adminToggle">Admin ▸</button>
     <div id="adminMenu" class="submenu" hidden>
+      <button data-tab="clients">Clients</button>
       <button data-tab="settings">Settings</button>
       <button data-tab="inspectors">Inspectors</button>
       <button data-tab="prices">Prices</button>
@@ -83,6 +81,13 @@
       <input name="next_due" type="date" title="Next check due">
       <button>Add property</button>
     </form>
+  </div>
+
+  <div id="tab-documents" class="tab hidden">
+    <h2>Documents</h2>
+    <div class="bar"><select id="docType"><option value="">All documents</option><option value="cert">Certificates</option><option value="inv">Invoices</option></select>
+      <input id="docSearch" placeholder="Search number…"> <button id="docPrev">◀</button><span id="docInfo"></span><button id="docNext">▶</button></div>
+    <table id="docList"></table>
   </div>
 
   <div id="tab-tenants" class="tab hidden">
@@ -276,6 +281,6 @@
   </main>
 </section>
 
-<script src="js/app.js?v=2611261535"></script>
+<script src="js/app.js?v=2611261624"></script>
 </body>
 </html>
