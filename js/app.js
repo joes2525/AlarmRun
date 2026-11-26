@@ -236,15 +236,15 @@ function renderGrouped(rows, el, which, groupBy) {
     node.push(r);
   }
   const cls = ['g0', 'g1', 'g2'];
-  let html = '<tr><th></th><th>Address</th><th>Last done</th><th>Due</th><th>Notes</th></tr>', gi = 0;
+  let html = '<tr><th></th><th>Address</th><th>Reason</th><th>Last done</th><th>Due</th><th>Notes</th></tr>', gi = 0;
   const walk = (node, lvl, ids) => {
     for (const k of order(node, keys[lvl])) {
       const id = which + (gi++), child = node[k], all = [...ids, id];
-      html += `<tr class="${cls[lvl]}"><td><input type="checkbox" data-group="${id}"></td><td colspan="4" data-focus="${id}" data-label="${esc(k)}">${'&nbsp;&nbsp;'.repeat(lvl)}${esc(k)} — ${n(child)}</td></tr>`;
+      html += `<tr class="${cls[lvl]}"><td><input type="checkbox" data-group="${id}"></td><td colspan="5" data-focus="${id}" data-label="${esc(k)}">${'&nbsp;&nbsp;'.repeat(lvl)}${esc(k)} — ${n(child)}</td></tr>`;
       if (Array.isArray(child)) {
         child.sort((x, y) => (x.suburb || '').localeCompare(y.suburb || '') || x.address_line.localeCompare(y.address_line));
         html += child.map(r => `<tr class="prow"><td><input type="checkbox" class="pick ${all.join(' ')}" data-key="${keyOf(r)}"${ticked[which].has(keyOf(r)) ? ' checked' : ''}></td>
-          <td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td>${date(r.last_done)}</td>
+          <td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td><span class="why why-${esc((r.reason || 'other').toLowerCase().replace(/\s+/g, '-'))}">${esc(r.reason || 'Other')}</span></td><td>${date(r.last_done)}</td>
           <td class="${r.due_date && r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td><td>${esc(r.notes)}</td></tr>`).join('');
       } else walk(child, lvl + 1, all);
     }
