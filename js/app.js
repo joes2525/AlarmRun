@@ -10,16 +10,23 @@ const get = (r, p) => p.split('.').reduce((o, k) => o && o[k], r);
 const date = v => v ? String(v).slice(0,10) : '';
 const leaseEnd = v => { if (!v) return ''; const days = Math.round((new Date(v) - new Date()) / 864e5);
   return esc(date(v)) + (days < 0 ? ' <span class=bad>(ended)</span>' : days <= 60 ? ` <span class=bad>(${days} days)</span>` : ''); };
+// photo: site path (img/...) or private storage path -> url
+const photoUrls = async paths => { const st = [...new Set(paths.filter(p => p && !p.startsWith('img/')))]; const m = {};
+  if (st.length) { const { data } = await sb.storage.from('photos').createSignedUrls(st, 3600); (data || []).forEach((d, i) => m[st[i]] = d.signedUrl); }
+  return p => !p ? '' : p.startsWith('img/') ? p : m[p] || ''; };
+const shrink = (file, max = 1280) => new Promise(res => { const img = new Image(); img.onload = () => { const k = Math.min(1, max / Math.max(img.width, img.height));
+  const c = document.createElement('canvas'); c.width = img.width * k; c.height = img.height * k; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  c.toBlob(res, 'image/jpeg', 0.8); }; img.src = URL.createObjectURL(file); });
 const money = v => v == null ? '' : '$' + Number(v).toFixed(2);
 
 // What each tab lists, what it searches, how it sorts
 const views = {
   clients: { table:'clients', select:'id,name,type,billing_email,phone', search:'name', order:'name', asc:true,
     cols:[['Name','name'],['Type','type'],['Billing email','billing_email'],['Phone','phone']] },
-  properties: { table:'properties', select:'id,address_line,suburb,postcode,clients(name),tenancies(tenant_names,owner_occupied,lease_start)', search:'address_line', order:'address_line', asc:true, click:true,
+  properties: { table:'properties', select:'id,address_line,suburb,postcode,photo,clients(name),tenancies(tenant_names,owner_occupied,lease_start)', search:'address_line', order:'address_line', asc:true, click:true,
     after: async rows => { const { data } = await sb.from('property_due').select('id,last_done,due_date').in('id', rows.map(r => r.id));
-      const m = Object.fromEntries((data || []).map(d => [d.id, d])); rows.forEach(r => { r.last_done = m[r.id]?.last_done; r.due = m[r.id]?.due_date; }); },
-    cols:[['Address','*',r => `${r.address_line}, ${r.suburb || ''} ${r.postcode || ''}`],['Agency / owner','clients.name'],
+      const m = Object.fromEntries((data || []).map(d => [d.id, d])); const url = await photoUrls(rows.map(r => r.photo)); rows.forEach(r => { r.last_done = m[r.id]?.last_done; r.due = m[r.id]?.due_date; r.pic = url(r.photo); }); },
+    cols:[['Address','*',r => `<div class="addr">${r.pic ? `<img class="thumb" src="${r.pic}" alt="">` : '<span class="thumb"></span>'}${esc(r.address_line)}, ${esc(r.suburb || '')} ${esc(r.postcode || '')}</div>`,'html'],['Agency / owner','clients.name'],
       ['Tenant','tenancies',t => { const x = [...(t || [])].sort((a, b) => String(b.lease_start).localeCompare(String(a.lease_start)))[0]; return x ? x.tenant_names + (x.owner_occupied ? ' (owner)' : '') : ''; }],
       ['Last inspected','last_done',date],['Next due','due',date]] },
   tenants: { table:'tenancies', select:'id,tenant_names,mobile,email,lease_start,lease_end,vacate_date,property_id,properties!inner(address_line,suburb)', search:'tenant_names', order:'lease_end', asc:false, click:'property_id',
@@ -83,7 +90,10 @@ async function openProperty(id) {
     sb.from('tenancies').select('*').eq('property_id', id).order('lease_start', { ascending: false, nullsFirst: false }),
   ]);
   const today = new Date().toISOString().slice(0,10);
+  const pic = (await photoUrls([p.photo]))(p.photo);
   $('#detailBody').innerHTML = `
+    <div class="phead">${pic ? `<img src="${pic}" alt="">` : '<div class="nophoto">🏠</div>'}
+      <label class="photobtn"><input type="file" accept="image/*" id="propPhoto" hidden>📷 ${pic ? 'Change' : 'Add'} photo</label></div>
     <h2>${esc(p.address_line)}, ${esc(p.suburb)} ${esc(p.postcode)}</h2>
     <p><b>Agency:</b> ${esc(p.clients?.name)} &nbsp; <b>Next due:</b> ${date(p.next_due)}<br>
     <b>Notes:</b> ${esc(p.access_notes)}</p>
@@ -124,6 +134,14 @@ async function openProperty(id) {
     const { error } = await sb.from('tenancies').update({ notice_by: sel.value }).eq('id', sel.dataset.noticeby);
     msg(error ? error.message : `Entry notices for this tenancy will go by ${sel.value} (applies to new bookings)`);
   });
+  $('#propPhoto').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return; msg('Uploading photo…');
+    const path = `${companyId}/property/${id}-${Date.now()}.jpg`;
+    const { error } = await sb.storage.from('photos').upload(path, await shrink(f), { contentType: 'image/jpeg' });
+    if (error) return msg(error.message);
+    const { error: e2 } = await sb.from('properties').update({ photo: path }).eq('id', id);
+    msg(e2 ? e2.message : 'Photo saved'); openProperty(id);
+  };
   $('#propNotesForm').onsubmit = async e => {
     e.preventDefault();
     const { error } = await sb.from('properties').update({ notes: e.target.notes.value || null }).eq('id', id);
