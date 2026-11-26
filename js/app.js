@@ -16,8 +16,12 @@ const money = v => v == null ? '' : '$' + Number(v).toFixed(2);
 const views = {
   clients: { table:'clients', select:'id,name,type,billing_email,phone', search:'name', order:'name', asc:true,
     cols:[['Name','name'],['Type','type'],['Billing email','billing_email'],['Phone','phone']] },
-  properties: { table:'properties', select:'id,address_line,suburb,postcode,next_due,tenant_name,clients(name)', search:'address_line', order:'address_line', asc:true, click:true,
-    cols:[['Address','address_line'],['Suburb','suburb'],['Agency','clients.name'],['Tenant','tenant_name'],['Next due','next_due',date]] },
+  properties: { table:'properties', select:'id,address_line,suburb,postcode,clients(name),tenancies(tenant_names,owner_occupied,lease_start)', search:'address_line', order:'address_line', asc:true, click:true,
+    after: async rows => { const { data } = await sb.from('property_due').select('id,last_done,due_date').in('id', rows.map(r => r.id));
+      const m = Object.fromEntries((data || []).map(d => [d.id, d])); rows.forEach(r => { r.last_done = m[r.id]?.last_done; r.due = m[r.id]?.due_date; }); },
+    cols:[['Address','*',r => `${r.address_line}, ${r.suburb || ''} ${r.postcode || ''}`],['Agency / owner','clients.name'],
+      ['Tenant','tenancies',t => { const x = [...(t || [])].sort((a, b) => String(b.lease_start).localeCompare(String(a.lease_start)))[0]; return x ? x.tenant_names + (x.owner_occupied ? ' (owner)' : '') : ''; }],
+      ['Last inspected','last_done',date],['Next due','due',date]] },
   tenants: { table:'tenancies', select:'id,tenant_names,mobile,email,lease_start,lease_end,vacate_date,property_id,properties!inner(address_line,suburb)', search:'tenant_names', order:'lease_end', asc:false, click:'property_id',
     cols:[['Address','properties.address_line'],['Suburb','properties.suburb'],['Tenants','tenant_names'],['Mobile','mobile'],['Email','email'],['Lease start','lease_start',date],['Lease end','lease_end',leaseEnd,'html'],['Vacate','vacate_date',date]] },
   inspectors: { table:'inspectors', select:'name,email,phone,base_suburb,daily_capacity,active', search:'name', order:'name', asc:true,
@@ -53,13 +57,14 @@ async function loadList() {
   if (term) q = q.ilike(v.search, `%${term}%`);
   const { data, count, error } = await q;
   if (error) return msg(error.message);
+  if (v.after && data.length) await v.after(data);
   msg('');
   const pages = Math.max(1, Math.ceil((count || 0) / PAGE));
   $('#pageInfo').textContent = ` Page ${page + 1} of ${pages} (${count} records) `;
   $('#prev').disabled = page === 0; $('#next').disabled = page + 1 >= pages;
   $('#list').innerHTML = '<tr>' + v.cols.map(c => `<th>${c[0]}</th>`).join('') + '</tr>' +
     data.map(r => `<tr${v.click ? ` class="click" data-id="${v.click === true ? r.id : r[v.click]}"` : ''}>` + v.cols.map(([, path, fmt, kind]) => {
-      const val = get(r, path);
+      const val = path === '*' ? r : get(r, path);
       if (kind === 'status' && !r.locked)
         return `<td><select data-job="${r.id}">${['to_book','booked','in_progress','completed','cancelled','no_access'].map(s => `<option${s===val?' selected':''}>${s}</option>`).join('')}</select></td>`;
       const out = fmt ? fmt(val) : val;
@@ -81,8 +86,6 @@ async function openProperty(id) {
   $('#detailBody').innerHTML = `
     <h2>${esc(p.address_line)}, ${esc(p.suburb)} ${esc(p.postcode)}</h2>
     <p><b>Agency:</b> ${esc(p.clients?.name)} &nbsp; <b>Next due:</b> ${date(p.next_due)}<br>
-    <b>Tenant:</b> ${esc(p.tenant_name)} ${esc(p.tenant_phone)} ${esc(p.tenant_email)}<br>
-    <b>Lease:</b> ${date(p.lease_start)} → ${date(p.lease_end)}<br>
     <b>Notes:</b> ${esc(p.access_notes)}</p>
     <form id="propNotesForm" style="display:block"><b>Property notes for inspectors</b><br>
       <textarea name="notes" rows="2" style="width:100%;box-sizing:border-box">${esc(p.notes || '')}</textarea>
