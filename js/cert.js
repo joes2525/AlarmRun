@@ -85,7 +85,7 @@ async function load() {
         <div class="co"><b>${esc(co?.sender_name || co?.name)}</b><br>${co?.abn ? 'ABN ' + esc(co.abn) + '<br>' : '<span class="bad">ABN missing – add in Settings</span><br>'}
           ${co?.phone ? esc(co.phone) + '<br>' : ''}${co?.reply_to_email ? esc(co.reply_to_email) : ''}</div>
       </header>
-      <div class="billto"><b>Bill to</b><br>${esc(cl.name || '—')}${cl.type === 'agency' && owner ? `<br>for owner ${esc(owner)}` : ''}${cl.billing_email ? '<br>' + esc(cl.billing_email) : ''}
+      <div class="billto"><b>Bill to</b><br>${esc(owner || (cl.name ? 'c/- ' + cl.name : '—'))}${owner && cl.type === 'agency' ? `<br>c/- ${esc(cl.name)}` : ''}${cl.billing_email ? '<br>' + esc(cl.billing_email) : ''}
         <br><b>Property</b>: ${esc(p.address_line)}, ${esc(p.suburb)} QLD ${esc(p.postcode)} · Inspected ${d(j.completed_at || j.scheduled_start)} · Certificate ${esc(cert.number || '')}</div>
       <table><tr><th>Description</th><th class="n">Qty</th><th class="n">GST</th><th class="n">Amount (inc GST)</th></tr>
         ${lines.map(l => `<tr><td>${esc(l.desc)}</td><td class="n">1</td><td class="n">${m(l.amt / 11)}</td><td class="n">${m(l.amt)}</td></tr>`).join('')}</table>
