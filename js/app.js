@@ -618,7 +618,7 @@ async function loadMessages() {
     $('#msgH-' + ch).textContent = `${{ email: '✉', sms: '💬', mail: '📮' }[ch]} ${CHANNELS[ch]} (${rows.length})`;
     $('#msgList-' + ch).innerHTML = !rows.length ? '<tr><td style="color:#777">None</td></tr>' :
       `<tr><th><input type="checkbox" class="mall"></th><th>${ch === 'mail' ? 'Status' : 'Send (Qld time)'}</th><th>To / subject</th><th>Message</th></tr>` +
-      rows.map((m, i) => (m.for_date !== rows[i - 1]?.for_date ? `<tr class="g1"><td></td><td colspan="3">Inspection ${m.for_date ? new Date(m.for_date + 'T00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' }) : '– no date'} — ${rows.filter(x => x.for_date === m.for_date).length}</td></tr>` : '') +
+      rows.map((m, i) => (m.for_date !== rows[i - 1]?.for_date ? `<tr class="g1"><td></td><td colspan="3">Inspection: ${m.for_date ? new Date(m.for_date + 'T00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' }) : 'no date'} (${rows.filter(x => x.for_date === m.for_date).length})</td></tr>` : '') +
         `<tr class="prow"><td><input type="checkbox" class="mpick" value="${m.id}"></td>
         <td>${ch === 'mail' ? (m.status === 'sent' ? 'Posted' : 'Print & post now') : new Date(m.send_after).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td>
         <td style="white-space:normal;width:22%"><b>${esc(m.to_name)}</b> <small>${esc(m.to_address || '— none')}</small><br>
