@@ -164,3 +164,6 @@ main button.r{background:#fbe5e4;color:var(--bad);border-color:#f3c2bf}
 #pxLists input[data-f="name"]{max-width:320px}
 #pxLists input[data-f="price"]{max-width:110px}
 #pxLists table{max-width:900px}
+#pxLists table,#pxLists td,#pxLists th{border:0}
+#pxLists td{padding:4px 10px;vertical-align:middle}
+#pxLists th{border-radius:0}
