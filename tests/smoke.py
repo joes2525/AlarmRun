@@ -181,8 +181,8 @@ def main():
         mstep('Tech: replacement fields', lambda: (m.select_option('[data-i="1"][data-f="replace_reason"]', 'Under warranty'), m.select_option('[data-i="1"][data-f="new_type"]', 'Photoelectric')))
         mstep('Tech: quote on item 2', lambda: m.select_option('[data-i="1"][data-f="quote"]', 'Upgrade'))
         mstep('Tech: add controller', lambda: (m.click('#addOpen'), m.select_option('#adLoc', 'Bedroom 2'), m.select_option('#adType', 'Alarm controller'), m.select_option('#adAct', 'Serviced'), m.click('#adSave')))
-        mstep('Tech: blind cleats + safety switch', lambda: (m.click('[data-x="blind_cleats"][data-v="Installed"]'), m.fill('[data-xi="blind_cleats_needed"]', '2'),
-              m.locator('[data-xi="blind_cleats_needed"]').dispatch_event('change'), m.click('[data-x="safety_switch"][data-v="Tested OK"]')))
+        mstep('Tech: blind cleats + safety switch', lambda: (m.click('[data-x="blind_cleats"][data-v="Installed"]:not(.on)') if m.locator('[data-x="blind_cleats"][data-v="Installed"].on').count() == 0 else None, m.fill('[data-xi="blind_cleats_needed"]', '2'),
+              m.locator('[data-xi="blind_cleats_needed"]').dispatch_event('change'), m.click('[data-x="safety_switch"][data-v="Tested OK"]') if m.locator('[data-x="safety_switch"][data-v="Tested OK"].on').count() == 0 else None))
         mstep('Tech: property details', lambda: (m.select_option('[data-xi="ceiling_access"]', 'Limited'), m.fill('[data-xi="bedrooms"]', '3'), m.locator('[data-xi="bedrooms"]').dispatch_event('change')))
         mstep('Tech: Non-compliant', lambda: m.click('[data-finish="non_compliant"]'))
         def check_rpc():
