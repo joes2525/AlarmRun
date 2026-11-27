@@ -515,7 +515,7 @@ async function openDay() {
     <div class="dayBox"><table class="grp"><tr><th>${tab === 'scheduled' ? '<input type="checkbox" id="dayAll">' : '#'}</th><th>Address</th><th>Agent</th><th>Area</th><th>Reason</th><th>Status</th><th></th><th>Notes</th></tr>` +
     data.map((j, i) => `<tr><td>${tab === 'scheduled' ? `<input type="checkbox" class="dpick" value="${j.id}"${dayTicked.has(j.id) ? ' checked' : ''}>` : i + 1}</td><td>${esc(j.properties?.address_line)}, ${esc(j.properties?.suburb)}</td>
       <td>${esc(j.properties?.clients?.name)}</td><td>${esc(areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || '')}</td>
-      <td>${label[j.job_type] || esc(j.job_type)}</td><td>${esc(j.status)}</td>
+      <td>${(r => `<span class="why why-${r.toLowerCase().replace(/\s+/g, '-')}">${esc(r)}</span>`)(label[j.job_type] || j.job_type)}</td><td>${esc(j.status)}</td>
       <td>${j.status === 'booked' ? `<button data-unbook="${j.id}" data-type="${j.job_type}">Unbook</button>` : ''}
         <button data-up="${i}" title="Move up" ${i ? '' : 'disabled'}>▲</button><button data-down="${i}" title="Move down" ${i < data.length - 1 ? '' : 'disabled'}>▼</button></td>
       <td>${esc(j.notes)}</td></tr>`).join('') + '</table></div>';
@@ -557,8 +557,9 @@ $('#dayView').addEventListener('click', async e => {
   if (up == null && down == null) return;
   const i = +(up ?? down), k = up != null ? i - 1 : i + 1;
   [dayJobIds[i], dayJobIds[k]] = [dayJobIds[k], dayJobIds[i]];
-  const rows = [...document.querySelectorAll('#dayView tr.prow')];   // swap rows on screen straight away
+  const rows = [...document.querySelectorAll('#dayView tr:has(td)')];   // swap rows on screen straight away
   if (up != null) rows[i].after(rows[k]); else rows[k].after(rows[i]);
+  document.querySelectorAll('#dayView button[data-up],#dayView button[data-down]').forEach(b => b.disabled = true);   // until saved
   await Promise.all(dayJobIds.map((id, n) => sb.from('jobs').update({ route_order: n + 1 }).eq('id', id)));
   openDay();
 });
