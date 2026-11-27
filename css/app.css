@@ -161,3 +161,6 @@ main button.r{background:#fbe5e4;color:var(--bad);border-color:#f3c2bf}
 #insTable td{overflow:hidden;text-overflow:ellipsis}
 #insTable input:not([type=checkbox]){width:100%!important;min-width:0;padding:5px 7px;box-sizing:border-box}
 #insTable td button{padding:5px 10px}
+#pxLists input[data-f="name"]{max-width:320px}
+#pxLists input[data-f="price"]{max-width:110px}
+#pxLists table{max-width:900px}
