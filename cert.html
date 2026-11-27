@@ -29,15 +29,20 @@
   .pics figure { margin: 0; break-inside: avoid; }
   .pics img { width: 100%; height: 48mm; object-fit: cover; border-radius: 4px; border: 1px solid #cbd2d9; }
   .pics figcaption { font-size: 9pt; color: #616e7c; margin-top: 2px; }
-  @media print { body { background: #fff; } .page { box-shadow: none; margin: 0; width: auto; min-height: 0; padding: 0; } .bar { display: none; } }
+  .prop { display: grid; grid-template-columns: 1fr 62mm; gap: 18px; align-items: start; }
+  .prop img { width: 62mm; height: 44mm; object-fit: cover; border-radius: 6px; border: 1px solid #cbd2d9; margin-top: 10px; }
+  .pics.big { grid-template-columns: repeat(2, 1fr); } .pics.big img { height: 62mm; }
+  @media print { body { background: #fff; } .page { box-shadow: none; margin: 0; width: auto; min-height: 0; padding: 0; } .bar { display: none; }
+    #cert2 { break-before: page; } }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611270913"></script>
+<script src="config.js?v=2611270914"></script>
 </head>
 <body>
 <div class="bar"><button onclick="print()">Print / save as PDF</button> <span id="previewNote"></span></div>
 <p id="msg"></p>
 <div class="page" id="cert"></div>
-<script src="js/cert.js?v=2611270913"></script>
+<div class="page" id="cert2" hidden></div>
+<script src="js/cert.js?v=2611270914"></script>
 </body>
 </html>
