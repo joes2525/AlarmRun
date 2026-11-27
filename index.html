@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap">
-<link rel="stylesheet" href="css/app.css?v=2611271321">
+<link rel="stylesheet" href="css/app.css?v=2611271330">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611271321"></script>
+<script src="config.js?v=2611271330"></script>
 </head>
 <body>
 <h1>AlarmRun – Office</h1>
@@ -113,6 +113,10 @@
   <div id="tab-invoices" class="tab hidden"><h2>Invoices</h2></div>
   <div id="tab-inspectors" class="tab hidden">
     <h2>Inspectors</h2>
+    <h3>Availability <small style="font-weight:normal;color:#555">– click a day to switch between available (green) and not available (red).</small></h3>
+    <p id="availNow" style="margin:0 0 6px;color:#555"></p>
+    <table id="availGrid" class="grp avail"></table>
+    <h3>Inspector details</h3>
     <table id="insTable"></table>
     <p><button type="button" id="insAddBtn" class="primary">+ Add inspector</button></p>
     <form id="insAdd" class="hidden">
@@ -123,9 +127,6 @@
       <input name="daily_capacity" type="number" placeholder="Jobs per day" value="18" min="1">
       <button class="primary">Save inspector</button> <button type="button" id="insAddCancel">Cancel</button>
     </form>
-    <h3>Availability <small style="font-weight:normal;color:#555">– click a day to switch between available (green) and not available (red).</small></h3>
-    <p id="availNow" style="margin:0 0 6px;color:#555"></p>
-    <table id="availGrid" class="grp avail"></table>
   </div>
 
   <div id="tab-home" class="tab hidden">
@@ -280,6 +281,6 @@
   </main>
 </section>
 
-<script src="js/app.js?v=2611271321"></script>
+<script src="js/app.js?v=2611271330"></script>
 </body>
 </html>
