@@ -851,6 +851,7 @@ $('#pxSave').onclick = async () => {
 };
 
 // ---------- Completed ----------
+const approvedNow = new Set();
 async function loadCompleted() {
   const f = $('#doneFilter');
   if (!f.from.value) { const d = new Date(); d.setDate(d.getDate() - 7); f.from.value = iso(d); f.to.value = iso(new Date()); }
@@ -858,8 +859,10 @@ async function loadCompleted() {
     .order('done_at', { ascending: false }).limit(1000);
   const t = f.q.value.trim();
   if (t) q = q.or(`address_line.ilike.%${t}%,suburb.ilike.%${t}%,agency.ilike.%${t}%`);
-  const { data, error } = await q;
+  const { data: all, error } = await q;
   if (error) return msg(error.message);
+  // approved jobs drop off on the next page load (ones approved just now stay so you can see them)
+  const data = all.filter(r => !r.approved_at || approvedNow.has(r.id) || f.showApproved.checked);
   const done = data.filter(r => r.status === 'completed');
   const groups = [
     ['Serviced – no issues', done.filter(r => !r.has_invoice && !r.has_quote), false],
@@ -887,6 +890,7 @@ let doneGroups = [];
 async function setApproved(ids, on) {
   ids.forEach(id => document.querySelectorAll(`[data-appr="${id}"]`).forEach(b => { b.classList.toggle('done', on); b.textContent = on ? '✓ Approved' : 'Approve'; }));
   const { data: { user } } = await sb.auth.getUser();
+  if (on) ids.forEach(id => approvedNow.add(id));
   const { error } = await sb.from('jobs').update(on ? { approved_at: new Date().toISOString(), approved_by: user?.id } : { approved_at: null, approved_by: null }).in('id', ids);
   if (error) { msg(error.message); return loadCompleted(); }
   loadCompleted();
