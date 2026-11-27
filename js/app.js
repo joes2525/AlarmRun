@@ -1243,7 +1243,7 @@ window.addEventListener('storage', e => {
 });
 
 // Documents: certificates + invoices together, newest first, 10 per page
-const DOCS = 10; let docPage = 0;
+const DOCS = 50; let docPage = 0;
 async function loadDocs() {
   const type = $('#docType').value, t = $('#docSearch').value.trim(), n = (docPage + 1) * DOCS;
   const cq = sb.from('certificates').select('job_id,number,compliant,issued_at,jobs(properties(address_line,suburb))', { count: 'exact' }).order('issued_at', { ascending: false }).limit(n);
