@@ -52,7 +52,7 @@ async function start() {
   $('#who').textContent = `${data[0].companies?.name || ''} · ${session.user.email}`;
   document.title = `${data[0].companies?.name || 'AlarmRun'} – Office`;
   show('app');
-  loadClientPick();
+  loadClientPick(); loadAlerts();
   document.querySelector('aside button[data-tab="home"]').click();
 }
 
@@ -418,7 +418,7 @@ async function loadDue() {
   if (a) q = /^\d+$/.test(a) ? q.eq('postcode', a) : q.or(`area.ilike.%${a}%,suburb.ilike.%${a}%`);
   const { data, error } = await q;
   if (error) return msg(error.message);
-  const rows = data.filter(r => !staged.has(keyOf(r)));
+  const rows = data.filter(r => !r.job_id && !staged.has(keyOf(r)));   // logged jobs (breakdowns, work orders…) go straight to Book
   dueRows = new Map(rows.map(r => [keyOf(r), r]));
   $('#dueInfo').textContent = `${rows.length} waiting` + (staged.size ? ` · ${staged.size} on Book` : '');
   renderGrouped(rows, $('#dueList'), 'due', f.group.value);
@@ -433,14 +433,14 @@ async function renderReady() {
     .is('inspector_id', null).in('status', ['to_book', 'booked']).limit(2000);
   if (error) return msg(error.message);
   const label = { callout: 'Breakdown', annual: 'Annual', pre_tenancy: 'Lease', sale: 'Sale', install: 'Install', work_order: 'Work order', upgrade: 'Upgrade' };
-  const unassigned = data.filter(j => j.status !== 'to_book')   // logged jobs live on Due
+  const unassigned = data   // every job without an inspector, including logged ones (breakdowns, work orders…)
     .map(j => ({ reason: label[j.job_type] || 'Other', property_id: j.property_id, job_id: j.id,
       address_line: j.properties?.address_line || '', suburb: j.properties?.suburb || '', postcode: j.properties?.postcode,
       agency: j.properties?.clients?.name, area: areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || 'No area',
       last_done: null, due_date: j.scheduled_start ? j.scheduled_start.slice(0,10) : null,
       notes: [j.scheduled_start ? 'Unassigned job' : 'Unbooked job', j.notes].filter(Boolean).join(' – ') }));
   readyRows = new Map([...staged, ...unassigned.map(r => [keyOf(r), r])]);
-  drawReady();
+  drawReady(); setBookBadge(readyRows.size);
 }
 
 $('#toBook').onclick = () => {
@@ -448,7 +448,7 @@ $('#toBook').onclick = () => {
   const n = ticked.due.size;
   for (const k of ticked.due) if (dueRows.has(k)) staged.set(k, dueRows.get(k));
   ticked.due.clear(); saveStaged(); loadDue();
-  msg(`Moved ${n} to Book`);
+  msg(`Moved ${n} to Book`); countBook();
 };
 $('#backToDue').onclick = () => {
   if (!ticked.ready.size) return msg('Tick some on the Ready to book list first');
@@ -699,7 +699,15 @@ $('#wkPrev').onclick = () => shiftWeek(-7);
 $('#wkNext').onclick = () => shiftWeek(7);
 
 // ---------- Messages (outbox) ----------
+// Book (n): jobs waiting for an inspector + what was moved over from Due
+const setBookBadge = n => { const b = document.querySelector('aside button[data-tab="book"]'); b.textContent = n ? `Book (${n})` : 'Book'; };
+async function countBook() {
+  const { data } = await sb.from('jobs').select('id,property_id,job_type').is('inspector_id', null).in('status', ['to_book', 'booked']).limit(2000);
+  const keys = new Set([...staged.keys(), ...(data || []).map(j => keyOf({ property_id: j.property_id, job_id: j.id, reason: '' }))]);
+  setBookBadge(keys.size);
+}
 async function loadAlerts() {
+  countBook();
   const { data, error } = await sb.from('notice_alerts').select('job_id,visit,inspector,address_line,suburb,problem').not('problem', 'is', null).order('visit');
   if (error) return msg(error.message);
   $('#alertBox').innerHTML = !data.length ? '' : `<div style="background:#fff8db;border:1px solid #f0d27a;border-radius:12px;padding:10px 12px;margin:8px 0">
