@@ -619,9 +619,9 @@ $('#wkNext').onclick = () => shiftWeek(7);
 async function loadAlerts() {
   const { data, error } = await sb.from('notice_alerts').select('job_id,visit,inspector,address_line,suburb,problem').not('problem', 'is', null).order('visit');
   if (error) return msg(error.message);
-  $('#alertBox').innerHTML = !data.length ? '' : `<div style="background:#fff3f3;border:1px solid #e0a0a0;padding:8px;margin:8px 0">
-    <b class="bad">⚠ ${data.length} entry notice problem${data.length === 1 ? '' : 's'}</b>
-    <table class="grp" style="margin-top:6px"><tr><th>Visit</th><th>Inspector</th><th>Property</th><th>Problem</th></tr>` +
+  $('#alertBox').innerHTML = !data.length ? '' : `<div style="background:#fff8db;border:1px solid #f0d27a;border-radius:12px;padding:10px 12px;margin:8px 0">
+    <b style="color:#8a6100">⚠ ${data.length} entry notice issue${data.length === 1 ? '' : 's'}</b>
+    <table class="grp" style="margin-top:6px"><tr><th>Visit</th><th>Inspector</th><th>Property</th><th>Issue</th></tr>` +
     data.map(a => `<tr class="prow"><td>${date(a.visit)}</td><td>${esc(a.inspector)}</td><td>${esc(a.address_line)}, ${esc(a.suburb)}</td><td>${esc(a.problem)}</td></tr>`).join('') +
     '</table></div>';
   const btn = document.querySelector('aside button[data-tab="messages"]');
@@ -944,7 +944,7 @@ async function loadHome() {
     card('due', due, 'Due in the next 2 weeks', `${overdue ? `<span class="bad">${overdue} overdue</span> · ` : ''}${breakdowns} breakdown${breakdowns === 1 ? '' : 's'}`),
     card('book', ready, 'Ready to book', 'waiting for an inspector and day'),
     card('completed', toApprove, 'Waiting for approval', 'completed in the last 30 days'),
-    card('messages', queued, 'Messages queued', alerts ? `<span class="bad">⚠ ${alerts} entry notice problem${alerts === 1 ? '' : 's'}</span>` : 'no problems'),
+    card('messages', queued, 'Messages queued', alerts ? `<span style="color:#8a6100">⚠ ${alerts} entry notice issue${alerts === 1 ? '' : 's'}</span>` : 'no issues'),
     card('tenants', leases, 'Leases ending soon', 'in the next 30 days')].join('');
   const rows = ins.map(i => {
     const js = todayJobs.filter(j => j.inspector_id === i.id); if (!js.length) return '';
