@@ -169,7 +169,8 @@ async function openJob(id, push = true) {
   job = { ...j, tenant: ten?.[0] || {},
     extra: { ceiling_access: p.ceiling_access || '', storeys: p.storeys || '', bedrooms: p.bedrooms || '',
       blind_cleats: j.blind_cleats || '', blind_cleats_needed: j.blind_cleats_needed || '', safety_switch: j.safety_switch || '',
-      safety_switch_notes: j.safety_switch_notes || '', comment: j.outcome_notes || '', comment_photo: j.comment_photo || '' },
+      safety_switch_notes: j.safety_switch_notes || '', comment: j.outcome_notes || '', comment_photo: j.comment_photo || '',
+      inspected_on: [bneDay(j.completed_at || j.scheduled_start) || bneToday(), bneToday()].sort()[0] },   // booked date, but never in the future
     items: (alarms || []).map(a => { const c = prev[a.id] || {};
       return { alarm_id: a.id, location: a.location, device_type: cap(a.sensor_type), manufacture_date: a.manufacture_date,
         expiry_date: a.expiry_date, brand: a.brand, power_source: a.power_source, action: c.action || '', quote: c.quote || '',
@@ -187,6 +188,8 @@ const saveDraft = () => { if (!job || job.locked || job.approved_at) return;
   try { localStorage.setItem('draft:' + job.id, JSON.stringify({ at: Date.now(), extra: job.extra,
     items: job.items.map(({ alarm_id, action, quote, replace_reason, photo_path, new_type, new_date }) => ({ alarm_id, action, quote, replace_reason, photo_path, new_type, new_date })) })); } catch {} };
 const dropDraft = id => { try { localStorage.removeItem('draft:' + id); } catch {} };
+const bneDay = v => v ? new Date(v).toLocaleDateString('en-CA', { timeZone: 'Australia/Brisbane' }) : '';   // YYYY-MM-DD in Queensland
+const bneToday = () => bneDay(new Date());
 const cap = s => s ? s[0].toUpperCase() + s.slice(1) : '';
 
 function renderJob() {
@@ -231,6 +234,11 @@ function renderJob() {
       <label class="muted">Ceiling access</label><select data-xi="ceiling_access">${opts(['Easy', 'Limited', 'None'], x.ceiling_access, '—')}</select>
       <div class="row"><div><label class="muted">Levels</label><input type="number" min="1" data-xi="storeys" value="${esc(x.storeys)}"></div>
         <div><label class="muted">Bedrooms</label><input type="number" min="0" data-xi="bedrooms" value="${esc(x.bedrooms)}"></div></div>
+    </div>
+
+    <div class="card"><h3>Inspection date</h3>
+      <input type="date" data-xi="inspected_on" id="inspDate" max="${bneToday()}" value="${esc(x.inspected_on)}">
+      <div id="dateFlag" class="date-flag"${x.inspected_on && x.inspected_on !== bneToday() ? '' : ' hidden'}>⚠ This isn't today's date</div>
     </div>
 
     <div class="finish">
@@ -291,6 +299,7 @@ $('#jobBody').addEventListener('input', e => { const t = e.target;
 $('#jobBody').addEventListener('change', async e => {
   const t = e.target;
   if (t.dataset.f) { const it = job.items[+t.dataset.i]; it[t.dataset.f] = t.type === 'month' ? t.value + '-01' : t.value; return saveDraft(); }
+  if (t.id === 'inspDate') $('#dateFlag').hidden = !t.value || t.value === bneToday();
   if (t.dataset.xi) { job.extra[t.dataset.xi] = t.value; return saveDraft(); }
   if (t.dataset.photo && t.files[0]) {
     const isComment = t.dataset.photo === 'comment';
@@ -312,6 +321,9 @@ async function finish(outcome, btn) {
   }
   const noAction = job.items.filter(it => !it.action);
   if (noAction.length && !confirm(`${noAction.length} item(s) have no action chosen. Finish anyway?`)) return;
+  if (!job.extra.inspected_on) return msg('Please enter the inspection date');
+  if (job.extra.inspected_on > bneToday()) return msg('The inspection date can\'t be in the future');
+  if (job.extra.inspected_on !== bneToday() && !confirm(`The inspection date is ${new Date(job.extra.inspected_on + 'T00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })} – not today. Is that right?`)) return;
   if (!job.extra.blind_cleats || !job.extra.safety_switch) return msg('Please answer the blind cleats and safety switch questions');
   if (['Needed', 'Installed'].includes(job.extra.blind_cleats) && !job.extra.blind_cleats_needed) return msg('Enter how many blind cleats');
   const badRep = job.items.find(it => it.action === 'Replaced' && (!it.replace_reason || !it.new_type));
