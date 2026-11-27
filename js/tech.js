@@ -280,8 +280,10 @@ $('#jobBody').addEventListener('change', async e => {
   if (t.dataset.xi) { job.extra[t.dataset.xi] = t.value; return; }
   if (t.dataset.photo && t.files[0]) {
     const isComment = t.dataset.photo === 'comment';
+    const lbl = t.closest('label'); lbl.nextElementSibling?.classList.contains('photo-ok') && lbl.nextElementSibling.remove();
+    lbl.insertAdjacentHTML('afterend', '<span class="photo-busy">Uploading…</span>');   // until the tick appears
     const path = await upload(t.files[0], isComment ? 'comment' : 'item' + t.dataset.photo);
-    if (!path) return;
+    if (!path) { lbl.parentNode.querySelector('.photo-busy')?.remove(); return; }
     if (isComment) job.extra.comment_photo = path; else job.items[+t.dataset.photo].photo_path = path;
     renderJob();
   }

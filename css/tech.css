@@ -71,3 +71,4 @@ button.primary,.seg button.on{background:var(--blue);border-color:var(--blue)}
 .seg button.on.act-b{background:var(--blue);border-color:var(--blue);color:#fff}
 .seg button.on.act-y{background:#facc15;border-color:#e0b400;color:#3f2d00}
 .seg button.on.act-r{background:#c8312b;border-color:#c8312b;color:#fff}
+.photo-busy{color:var(--bad);font-weight:700;margin-left:8px;animation:blink 1s infinite}@keyframes blink{50%{opacity:.4}}
