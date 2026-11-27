@@ -81,6 +81,7 @@ async function loadList() {
 
 // Property detail: info + alarms + history
 async function openProperty(id) {
+  scrollTo(0, 0);
   $('#listArea').classList.add('hidden'); $('#detail').classList.remove('hidden');
   document.querySelectorAll('.tab form').forEach(f => f.classList.add('hidden'));
   const [{ data: p }, { data: alarms }, { data: jobs }, { data: ten }] = await Promise.all([
@@ -249,7 +250,7 @@ function renderGrouped(rows, el, which, groupBy) {
       if (Array.isArray(child)) {
         child.sort((x, y) => (x.suburb || '').localeCompare(y.suburb || '') || x.address_line.localeCompare(y.address_line));
         html += child.map(r => `<tr class="prow"><td><input type="checkbox" class="pick ${all.join(' ')}" data-key="${keyOf(r)}"${ticked[which].has(keyOf(r)) ? ' checked' : ''}></td>
-          <td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td><span class="why why-${esc((r.reason || 'other').toLowerCase().replace(/\s+/g, '-'))}">${esc(r.reason || 'Other')}</span></td><td>${date(r.last_done)}</td>
+          <td><a href="#" data-prop="${r.property_id}">${esc(r.address_line)}, ${esc(r.suburb)}</a></td><td><span class="why why-${esc((r.reason || 'other').toLowerCase().replace(/\s+/g, '-'))}">${esc(r.reason || 'Other')}</span></td><td>${date(r.last_done)}</td>
           <td class="${r.due_date && r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td><td>${esc(r.notes)}</td></tr>`).join('');
       } else walk(child, lvl + 1, all);
     }
@@ -497,7 +498,7 @@ async function openDay() {
   const ins = inspectors.find(i => i.id === pick.ins);
   if (!ins) { $('#dayView').innerHTML = '<h3>Pick a day on the week board</h3><div class="dayBox"></div>'; return; }
   const day = pick.day;
-  const { data, error } = await sb.from('jobs').select('id,job_type,status,route_order,notes,tenant_note,properties(address_line,suburb,clients(name))')
+  const { data, error } = await sb.from('jobs').select('id,property_id,job_type,status,route_order,notes,tenant_note,properties(address_line,suburb,clients(name))')
     .eq('inspector_id', ins.id).gte('scheduled_start', day + 'T00:00').lte('scheduled_start', day + 'T23:59')
     .in('status', ['booked', 'in_progress']).order('route_order');
   if (error) return msg(error.message);
@@ -517,7 +518,7 @@ async function openDay() {
   }
   $('#dayView').innerHTML = `<h3>${esc(ins.name)} – ${nice} (${data.length}/${ins.daily_capacity})</h3>
     <div class="dayBox"><table class="grp"><tr><th>${tab === 'scheduled' ? '<input type="checkbox" id="dayAll">' : '#'}</th><th>Address</th><th>Agent</th><th>Area</th><th>Reason</th><th>Status</th><th></th><th>Notes</th></tr>` +
-    data.map((j, i) => `<tr${j.id === movedJob ? ' class="moved"' : ''}><td>${tab === 'scheduled' ? `<input type="checkbox" class="dpick" value="${j.id}"${dayTicked.has(j.id) ? ' checked' : ''}>` : i + 1}</td><td>${esc(j.properties?.address_line)}, ${esc(j.properties?.suburb)}</td>
+    data.map((j, i) => `<tr${j.id === movedJob ? ' class="moved"' : ''}><td>${tab === 'scheduled' ? `<input type="checkbox" class="dpick" value="${j.id}"${dayTicked.has(j.id) ? ' checked' : ''}>` : i + 1}</td><td><a href="#" data-prop="${j.property_id}">${esc(j.properties?.address_line)}, ${esc(j.properties?.suburb)}</a></td>
       <td>${esc(j.properties?.clients?.name)}</td><td>${esc(areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || '')}</td>
       <td>${(r => `<span class="why why-${r.toLowerCase().replace(/\s+/g, '-')}">${esc(r)}</span>`)(label[j.job_type] || j.job_type)}</td><td>${esc(j.status)}</td>
       <td>${j.status === 'booked' ? `<button data-unbook="${j.id}" data-type="${j.job_type}">Unbook</button>` : ''}
@@ -1016,7 +1017,16 @@ let timer;
 $('#search').addEventListener('input', e => { clearTimeout(timer); timer = setTimeout(() => { term = e.target.value.trim(); page = 0; loadList(); }, 300); });
 $('#prev').onclick = () => { page--; loadList(); };
 $('#next').onclick = () => { page++; loadList(); };
-$('#back').onclick = () => { $('#detail').classList.add('hidden'); $('#listArea').classList.remove('hidden'); document.querySelectorAll('.tab form').forEach(f => f.classList.remove('hidden')); loadList(); };
+$('#back').onclick = () => {
+  $('#detail').classList.add('hidden'); document.querySelectorAll('.tab form').forEach(f => f.classList.remove('hidden'));
+  if (['due', 'book', 'scheduled'].includes(tab)) return openSchedule();      // opened from Due/Book/Scheduled: go back there
+  $('#listArea').classList.remove('hidden'); loadList();
+};
+// address links on Due / Book / Scheduled open the property card
+document.querySelector('main').addEventListener('click', e => {
+  const a = e.target.closest('a[data-prop]'); if (!a) return;
+  e.preventDefault(); e.stopPropagation(); openProperty(a.dataset.prop);
+}, true);
 // Admin group in the sidebar opens/closes; stays open while one of its pages is showing
 $('#adminToggle').onclick = () => { const m = $('#adminMenu'); m.hidden = !m.hidden; $('#adminToggle').textContent = m.hidden ? 'Admin ▸' : 'Admin ▾'; };
 document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () => {
