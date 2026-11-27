@@ -3,13 +3,14 @@
 // Secrets needed (Supabase → Edge Functions → Secrets): RESEND_API_KEY, optional EMAIL_FROM_ADDRESS
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
-import { PDFDocument } from "npm:pdf-lib@1.17.1";
+import { PDFDocument, StandardFonts } from "npm:pdf-lib@1.17.1";
 
 const FROM_ADDRESS = Deno.env.get("EMAIL_FROM_ADDRESS") ?? "onboarding@resend.dev"; // test sender until our domain is verified
 const MAX_ATTEMPTS = 3;
 // blank RTA Entry notice (Form 9), filled in and attached to every entry-notice email
 const FORM9_URL = Deno.env.get("FORM9_URL") ?? "https://joes2525.github.io/AlarmRun/forms/form9.pdf";
 let form9: Uint8Array | null = null;
+const sigs = new Map<string, Uint8Array | null>();   // company signature images, loaded once per run
 
 // allow the office app (a different website address) to call this function
 const CORS = {
@@ -26,6 +27,7 @@ type Form9 = {
   company: string; phone: string; entering: string;
   issued: Date; visit: Date;            // notice issue time and visit date
   timeOfEntry?: string;                 // e.g. "8am – 5pm"
+  signature?: Uint8Array | null;        // PNG/JPG; if none, the company name is written instead
 };
 
 const tz = "Australia/Brisbane";
@@ -58,6 +60,23 @@ async function fillForm9(template: Uint8Array, f: Form9): Promise<Uint8Array> {
   set("Print name", f.company);
   set("Date of signature (dd/mm/yyyy)", dmy(f.issued));
 
+  // signature goes in the box between "Print name" and "Date" (it isn't a form field)
+  try {
+    const r1 = form.getTextField("Print name").acroField.getWidgets()[0].getRectangle();
+    const r2 = form.getTextField("Date of signature (dd/mm/yyyy)").acroField.getWidgets()[0].getRectangle();
+    const page = pdf.getPages()[0];
+    const box = { x: r1.x + r1.width + 12, y: r1.y + 1, w: r2.x - (r1.x + r1.width) - 24, h: r1.height - 2 };
+    if (f.signature?.length) {
+      const png = f.signature[0] === 0x89;
+      const img = png ? await pdf.embedPng(f.signature) : await pdf.embedJpg(f.signature);
+      const k = Math.min(box.w / img.width, box.h / img.height);
+      page.drawImage(img, { x: box.x + (box.w - img.width * k) / 2, y: box.y + (box.h - img.height * k) / 2, width: img.width * k, height: img.height * k });
+    } else {
+      const font = await pdf.embedFont(StandardFonts.HelveticaOblique);
+      page.drawText(f.company, { x: box.x + 4, y: box.y + box.h / 2 - 4, size: 10, font, maxWidth: box.w - 8 });
+    }
+  } catch { /* leave the box empty rather than fail the notice */ }
+
   for (const b of ["Reset form", "Print form"]) { try { form.removeField(form.getField(b)); } catch { /* ignore */ } }
   form.flatten();                                              // tenants can't edit it
   return await pdf.save();
@@ -82,7 +101,7 @@ Deno.serve(async (req) => {
   if (!key) return reply({ error: "RESEND_API_KEY secret is not set" }, 500);
 
   const { data: due, error } = await db.from("messages")
-    .select("id, company_id, kind, for_date, to_name, to_address, subject, body, attempts, companies(name, sender_name, reply_to_email, phone), tenancies(tenant_names), jobs(scheduled_start, inspectors(name), properties(address_line, suburb, postcode))")
+    .select("id, company_id, kind, for_date, to_name, to_address, subject, body, attempts, companies(name, sender_name, reply_to_email, phone, signature), tenancies(tenant_names), jobs(scheduled_start, inspectors(name), properties(address_line, suburb, postcode))")
     .eq("status", "queued").eq("channel", "email").lte("send_after", new Date().toISOString())
     .order("send_after").limit(50);
   if (error) return reply({ error: error.message }, 500);
@@ -96,11 +115,16 @@ Deno.serve(async (req) => {
       try {
         form9 ??= new Uint8Array(await (await fetch(FORM9_URL)).arrayBuffer());
         const j = (m as any).jobs ?? {}, p = j.properties ?? {}, company = co.sender_name || co.name || "";
+        if (co.signature && !sigs.has(co.signature)) {
+          const { data: file } = await db.storage.from("photos").download(co.signature);
+          sigs.set(co.signature, file ? new Uint8Array(await file.arrayBuffer()) : null);
+        }
         const pdf = await fillForm9(form9, {
           tenants: (m as any).tenancies?.tenant_names || m.to_name || "Tenant",
           address: p.address_line ?? "", suburb: p.suburb ?? "", postcode: p.postcode ?? "",
           company, phone: co.phone ?? "",
-          entering: j.inspectors?.name ? `${j.inspectors.name} (${company} technician)` : `${company} technician`,
+          entering: j.inspectors?.name ? `${j.inspectors.name} (or other ${company} technician)` : `${company} technician`,
+          signature: co.signature ? sigs.get(co.signature) : null,
           issued: new Date(), visit: new Date(j.scheduled_start ?? `${m.for_date}T00:00:00+10:00`),
         });
         attachments = [{ filename: `Entry notice - ${p.address_line ?? "property"}.pdf`, content: encodeBase64(pdf) }];

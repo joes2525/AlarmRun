@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap">
-<link rel="stylesheet" href="css/app.css?v=2611270914">
+<link rel="stylesheet" href="css/app.css?v=2611270923">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611270914"></script>
+<script src="config.js?v=2611270923"></script>
 </head>
 <body>
 <h1>AlarmRun – Office</h1>
@@ -240,6 +240,11 @@
       <span></span><button class="primary" style="justify-self:start">Save</button>
     </form>
     <p id="coPreview" style="margin-top:14px;background:#f4f4f4;padding:10px;max-width:640px"></p>
+    <h3>Signature for entry notices</h3>
+    <p class="muted">Goes on the Form 9 attached to entry notice emails. Leave blank to use the company name instead. A clear signature on white or transparent background works best (PNG or JPG).</p>
+    <div class="sigbox"><img id="sigImg" alt="" hidden><span id="sigNone">No signature – the company name is used</span></div>
+    <p><label class="photobtn" style="position:static;display:inline-block"><input type="file" accept="image/png,image/jpeg" id="sigFile" hidden>Upload signature</label>
+      <button type="button" id="sigRemove" hidden>Remove</button></p>
   </div>
 
   <div id="weekArea" class="hidden">
@@ -278,6 +283,6 @@
   </main>
 </section>
 
-<script src="js/app.js?v=2611270914"></script>
+<script src="js/app.js?v=2611270923"></script>
 </body>
 </html>

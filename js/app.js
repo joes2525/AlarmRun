@@ -733,11 +733,29 @@ $('#tplSave').onclick = async () => {
 // ---------- Company settings ----------
 const PLATFORM_DOMAIN = 'yourdomain.com.au';   // change when the real sending domain is set up
 async function loadCompany() {
-  const { data, error } = await sb.from('companies').select('name,sender_name,sender_code,reply_to_email,phone,abn,qbcc_licence').eq('id', companyId).single();
+  const { data, error } = await sb.from('companies').select('name,sender_name,sender_code,reply_to_email,phone,abn,qbcc_licence,signature').eq('id', companyId).single();
   if (error) return msg(error.message);
   const f = $('#coForm'); for (const k in data) if (f[k]) f[k].value = data[k] ?? '';
-  coPreview();
+  coPreview(); showSig(data.signature);
 }
+async function showSig(path) {
+  const url = path ? (await photoUrls([path]))(path) : '';
+  $('#sigImg').hidden = !url; if (url) $('#sigImg').src = url;
+  $('#sigNone').hidden = !!url; $('#sigRemove').hidden = !path;
+}
+$('#sigFile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (f.size > 2e6) return msg('Signature image too big – keep it under 2 MB');
+  const path = `${companyId}/signature-${Date.now()}.${f.type === 'image/png' ? 'png' : 'jpg'}`;
+  const { error } = await sb.storage.from('photos').upload(path, f, { contentType: f.type });
+  if (error) return msg(error.message);
+  const { error: e2 } = await sb.from('companies').update({ signature: path }).eq('id', companyId);
+  msg(e2 ? e2.message : 'Signature saved'); showSig(path); e.target.value = '';
+};
+$('#sigRemove').onclick = async () => {
+  const { error } = await sb.from('companies').update({ signature: null }).eq('id', companyId);
+  msg(error ? error.message : 'Signature removed – the company name will be used'); showSig(null);
+};
 function coPreview() {
   const f = $('#coForm');
   $('#coPreview').innerHTML = `Tenants will see emails from:<br><b>${esc(f.sender_name.value || f.name.value)}</b> &lt;${esc(f.sender_code.value || 'code')}@${PLATFORM_DOMAIN}&gt;<br>
