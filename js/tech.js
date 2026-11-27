@@ -316,7 +316,18 @@ async function finish(outcome, btn) {
   if (['Needed', 'Installed'].includes(job.extra.blind_cleats) && !job.extra.blind_cleats_needed) return msg('Enter how many blind cleats');
   const badRep = job.items.find(it => it.action === 'Replaced' && (!it.replace_reason || !it.new_type));
   if (badRep) return msg(`${badRep.location}: choose why it was replaced and the new device type`);
-  if (!confirm(outcome === 'compliant' ? 'Issue a COMPLIANT certificate?' : 'Mark as NON-COMPLIANT?')) return;
+  if (outcome === 'compliant') {   // anything that doesn't look compliant? warn before issuing the certificate
+    const today = new Date().toISOString().slice(0, 10), warn = [];
+    job.items.forEach(it => {
+      const c = actColour(it.action || '');
+      if (!it.action) warn.push(`${it.location}: no action chosen`);
+      else if (c === 'act-y' || c === 'act-r') warn.push(`${it.location}: ${it.action}`);
+      else if (it.action !== 'Replaced' && it.expiry_date && it.expiry_date < today) warn.push(`${it.location}: expired and not replaced`);
+      if (it.quote) warn.push(`${it.location}: quote – ${it.quote}`);
+    });
+    if (warn.length && !confirm('⚠ These alarms don\'t look compliant:\n\n• ' + warn.join('\n• ') + '\n\nIssue a COMPLIANT certificate anyway?')) return;
+    if (!warn.length && !confirm('Issue a COMPLIANT certificate?')) return;
+  } else if (!confirm('Mark as NON-COMPLIANT?')) return;
   btn.disabled = true;
   const items = job.items.map(it => {
     const rep = it.action === 'Replaced';
