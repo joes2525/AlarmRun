@@ -88,7 +88,7 @@ async function openProperty(id) {
   const [{ data: p }, { data: alarms }, { data: jobs }, { data: ten }] = await Promise.all([
     sb.from('properties').select('*,clients(name)').eq('id', id).single(),
     sb.from('alarms').select('*').eq('property_id', id).not('active', 'is', false).order('location'),
-    sb.from('jobs').select('job_type,status,scheduled_start,notes,certificates(number,compliant)').eq('property_id', id).order('scheduled_start', { ascending: false }),
+    sb.from('jobs').select('id,job_type,status,scheduled_start,completed_at,notes,certificates(number,compliant)').eq('property_id', id).order('scheduled_start', { ascending: false }),
     sb.from('tenancies').select('*').eq('property_id', id).order('lease_start', { ascending: false, nullsFirst: false }),
   ]);
   const [nq, iq] = await Promise.all([
@@ -143,7 +143,7 @@ async function openProperty(id) {
     <h3>Inspection history (${jobs.length})</h3>
     <table><tr><th>Date</th><th>Type</th><th>Status</th><th>Certificate</th><th>Notes</th></tr>
     ${jobs.map(j => { const c = j.certificates?.[0] || j.certificates; return `<tr><td>${date(j.scheduled_start)}</td><td>${esc(j.job_type)}</td><td>${esc(j.status)}</td>
-      <td>${c?.number ? esc(c.number) + (c.compliant ? ' <span class=good>✓</span>' : ' <span class=bad>✗</span>') : ''}</td><td>${esc(j.notes)}</td></tr>`; }).join('')}</table>
+      <td>${c?.number ? `<a href="cert.html?job=${j.id}" target="_blank">${esc(c.number)}</a>` + (c.compliant ? ' <span class=good>✓ Compliant</span>' : ' <span class=bad>✗ Non-compliant</span>') : ''}</td><td>${esc(j.notes)}</td></tr>`; }).join('')}</table>
     <h3>Entry notices (${notices.length})</h3>
     ${notices.length ? `<table><tr><th>Visit</th><th>Type</th><th>By</th><th>To</th><th>Status</th><th>Sent</th></tr>${notices.map(m => `<tr>
       <td>${date(m.for_date)}</td><td>${esc((m.kind || '').replace('entry_notice_changed', 'Date changed').replace('entry_notice', 'Entry notice').replace('reminder', 'Reminder'))}</td>
@@ -1117,22 +1117,36 @@ async function loadDocs() {
   const type = $('#docType').value, t = $('#docSearch').value.trim(), n = (docPage + 1) * DOCS;
   const cq = sb.from('certificates').select('job_id,number,compliant,issued_at,jobs(properties(address_line,suburb))', { count: 'exact' }).order('issued_at', { ascending: false }).limit(n);
   const iq = sb.from('invoices').select('number,amount_ex_gst,gst,status,created_at,clients(name)', { count: 'exact' }).order('created_at', { ascending: false }).limit(n);
-  if (t) { cq.ilike('number', `%${t}%`); iq.ilike('number', `%${t}%`); }
+  const mq = sb.from('messages').select('id,kind,channel,to_name,to_address,status,sent_at,send_after,for_date,body,properties(address_line,suburb)', { count: 'exact' })
+    .like('kind', 'entry_notice%').neq('status', 'cancelled').order('send_after', { ascending: false }).limit(n);
+  if (t) { cq.ilike('number', `%${t}%`); iq.ilike('number', `%${t}%`); mq.or(`to_name.ilike.%${t}%,to_address.ilike.%${t}%`); }
   const none = { data: [], count: 0 };
-  const [c, i] = await Promise.all([type === 'inv' ? none : cq, type === 'cert' ? none : iq]);
-  if (c.error || i.error) return msg((c.error || i.error).message);
+  const [c, i, m] = await Promise.all([type && type !== 'cert' ? none : cq, type && type !== 'inv' ? none : iq, type && type !== 'notice' ? none : mq]);
+  if (c.error || i.error || m.error) return msg((c.error || i.error || m.error).message);
+  docMsgs = Object.fromEntries(m.data.map(x => [x.id, x]));
   const rows = [...c.data.map(r => ({ d: r.issued_at, type: 'Certificate', num: r.number, who: [r.jobs?.properties?.address_line, r.jobs?.properties?.suburb].filter(Boolean).join(', '),
       info: r.compliant ? '<span class=good>Compliant</span>' : '<span class=bad>Non-compliant</span>', link: `cert.html?job=${r.job_id}` })),
     ...i.data.map(r => ({ d: r.created_at, type: 'Invoice', num: r.number, who: r.clients?.name || '',
-      info: `${money(Number(r.amount_ex_gst) + Number(r.gst || 0))} inc GST · ${esc(r.status)}` }))]
+      info: `${money(Number(r.amount_ex_gst) + Number(r.gst || 0))} inc GST · ${esc(r.status)}` })),
+    ...m.data.map(r => ({ d: r.sent_at || r.send_after, type: r.kind === 'entry_notice_changed' ? 'Entry notice (date changed)' : 'Entry notice', num: r.channel === 'mail' ? 'Letter' : r.channel === 'sms' ? 'Text' : 'Email',
+      who: [r.properties?.address_line, r.properties?.suburb].filter(Boolean).join(', '),
+      info: `Visit ${date(r.for_date)} · ${r.status === 'sent' ? (r.channel === 'mail' ? 'posted' : 'sent') : esc(r.status)}`, view: r.id }))]
     .sort((a, b) => String(b.d).localeCompare(String(a.d))).slice(docPage * DOCS, n);
-  const total = (c.count || 0) + (i.count || 0), pages = Math.max(1, Math.ceil(total / DOCS));
+  const total = (c.count || 0) + (i.count || 0) + (m.count || 0), pages = Math.max(1, Math.ceil(total / DOCS));
   $('#docInfo').textContent = ` Page ${docPage + 1} of ${pages} (${total}) `;
   $('#docPrev').disabled = docPage === 0; $('#docNext').disabled = docPage + 1 >= pages;
   $('#docList').innerHTML = '<tr><th>Date</th><th>Type</th><th>Number</th><th>Property / client</th><th>Details</th><th></th></tr>' +
     rows.map(r => `<tr><td>${date(r.d)}</td><td>${r.type}</td><td>${esc(r.num)}</td><td>${esc(r.who)}</td><td>${r.info}</td>
-      <td>${r.link ? `<a href="${r.link}" target="_blank">Open</a>` : ''}</td></tr>`).join('');
+      <td>${r.link ? `<a href="${r.link}" target="_blank">Open</a>` : r.view ? `<a href="#" data-docmsg="${r.view}">View</a>` : ''}</td></tr>`).join('');
 }
+let docMsgs = {};
+$('#docList').onclick = e => {   // show an entry notice's text under its row
+  const a = e.target.closest('[data-docmsg]'); if (!a) return; e.preventDefault();
+  const tr = a.closest('tr'), nx = tr.nextElementSibling;
+  if (nx?.classList.contains('docbody')) return nx.remove();
+  const m = docMsgs[a.dataset.docmsg];
+  tr.insertAdjacentHTML('afterend', `<tr class="docbody"><td colspan="6"><small class="muted">To: ${esc(m.to_name)} – ${esc(m.to_address)}</small><div style="white-space:pre-wrap;margin-top:6px">${esc(m.body)}</div></td></tr>`);
+};
 $('#docType').onchange = () => { docPage = 0; loadDocs(); };
 let docTimer; $('#docSearch').oninput = () => { clearTimeout(docTimer); docTimer = setTimeout(() => { docPage = 0; loadDocs(); }, 300); };
 $('#docPrev').onclick = () => { docPage--; loadDocs(); };
