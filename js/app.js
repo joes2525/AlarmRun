@@ -986,10 +986,12 @@ async function loadCompleted() {
   // approved jobs drop off on the next page load (ones approved just now stay so you can see them)
   const data = all.filter(r => !r.approved_at || approvedNow.has(r.id) || f.showApproved.checked);
   const done = data.filter(r => r.status === 'completed');
+  const ok = done.filter(r => r.compliant);
   const groups = [
-    ['Serviced – no issues', done.filter(r => !r.has_invoice && !r.has_quote), false],
-    ['Invoices – extra work done', done.filter(r => r.has_invoice), true],
-    ['Quotes', done.filter(r => r.has_quote), true],
+    ['Non-compliant', done.filter(r => !r.compliant), true],
+    ['Serviced – no issues', ok.filter(r => !r.has_invoice && !r.has_quote), false],
+    ['Invoices – extra work done', ok.filter(r => r.has_invoice), true],
+    ['Quotes', ok.filter(r => r.has_quote), true],
     ['No access', data.filter(r => r.status === 'no_access'), true]];
   const when = d => new Date(d).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
   const cleats = r => r.blind_cleats === 'Installed' ? `Blind cleats installed ×${r.blind_cleats_needed || '?'}` : r.blind_cleats === 'Needed' ? `Blind cleats needed ×${r.blind_cleats_needed || '?'}` : '';
