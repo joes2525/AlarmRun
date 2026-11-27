@@ -146,3 +146,4 @@ main:has(#detail:not(.hidden))>#weekArea{display:none}
 a[data-prop]{color:inherit;text-decoration:none;border-bottom:1px dotted #9fb0c8}a[data-prop]:hover{color:var(--blue);border-bottom-color:var(--blue)}
 #detailBody h3 button{font-size:13px;padding:4px 10px;margin-left:8px;vertical-align:middle}
 main button.r{background:#fbe5e4;color:var(--bad);border-color:#f3c2bf}
+#week ~ #dayView th:nth-child(1){width:64px}
