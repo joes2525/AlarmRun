@@ -1016,6 +1016,27 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   if (['due', 'book', 'scheduled'].includes(tab)) { $('#listArea').classList.add('hidden'); return openSchedule(); }
   $('#back').onclick();
 });
+// Keep several open windows in step: reload the current table when you come back to a window
+const reloaders = { home: () => loadHome(), completed: () => loadCompleted(), documents: () => loadDocs(), messages: () => loadMessages(),
+  due: () => openSchedule(), book: () => openSchedule(), scheduled: () => openSchedule(),
+  clients: () => loadList(), properties: () => loadList(), tenants: () => loadList(), inspectors: () => loadList() };
+let leftAt = 0;
+const refreshTab = () => {
+  if (!companyId || !$('#detail').classList.contains('hidden')) return;     // not signed in / property open
+  if (document.activeElement?.matches('input:not([type=checkbox]),textarea,select')) return;   // or half-typed input
+  reloaders[tab]?.();
+};
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) leftAt = Date.now(); else if (Date.now() - leftAt > 10000) refreshTab(); });
+window.addEventListener('blur', () => leftAt = Date.now());
+window.addEventListener('focus', () => { if (leftAt && Date.now() - leftAt > 10000) refreshTab(); leftAt = 0; });
+// Due -> Book list lives in this browser: follow changes made in another window straight away
+window.addEventListener('storage', e => {
+  if (e.key !== 'staged2') return;
+  staged.clear(); try { for (const [k, v] of JSON.parse(e.newValue || '[]')) staged.set(k, v); } catch {}
+  if (['due', 'book', 'scheduled'].includes(tab)) openSchedule();
+});
+
 // Documents: certificates + invoices together, newest first, 10 per page
 const DOCS = 10; let docPage = 0;
 async function loadDocs() {
