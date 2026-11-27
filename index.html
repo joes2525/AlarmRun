@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap">
-<link rel="stylesheet" href="css/app.css?v=2611271229">
+<link rel="stylesheet" href="css/app.css?v=2611271233">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611271229"></script>
+<script src="config.js?v=2611271233"></script>
 </head>
 <body>
 <h1>AlarmRun – Office</h1>
@@ -71,13 +71,7 @@
 
   <div id="tab-properties" class="tab hidden">
     <h2>Properties</h2>
-    <form data-table="properties">
-      <input name="address_line" placeholder="Street address" required>
-      <input name="suburb" placeholder="Suburb">
-      <input name="postcode" placeholder="Postcode">
-      <select name="client_id" class="clientPick"></select>
-      <button>Add property</button>
-    </form>
+    <p><button type="button" id="newPropBtn" class="primary">+ Add property</button></p>
   </div>
 
   <div id="tab-documents" class="tab hidden">
@@ -270,7 +264,7 @@
   <!-- shared list area -->
   <div id="listArea">
     <div class="bar">
-      <input id="search" placeholder="Search…" size="30">
+      <input id="search" placeholder="Search…" size="45">
       <button id="prev">◀ Prev</button><span id="pageInfo"></span><button id="next">Next ▶</button>
     </div>
     <table id="list"></table>
@@ -284,6 +278,6 @@
   </main>
 </section>
 
-<script src="js/app.js?v=2611271229"></script>
+<script src="js/app.js?v=2611271233"></script>
 </body>
 </html>

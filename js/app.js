@@ -61,7 +61,11 @@ async function loadList() {
   let q = sb.from(v.table).select(v.select, { count: 'exact' })
     .order(v.order, { ascending: v.asc, nullsFirst: false })
     .range(page * PAGE, page * PAGE + PAGE - 1);
-  if (term) q = q.ilike(v.search, `%${term}%`);
+  if (term && tab === 'properties') {   // search address, client, manager and tenants (names, phones, emails)
+    const { data: ids, error: se } = await sb.rpc('search_property_ids', { q: term });
+    if (se) return msg(se.message);
+    q = q.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+  } else if (term) q = q.ilike(v.search, `%${term}%`);
   const { data, count, error } = await q;
   if (error) return msg(error.message);
   if (v.after && data.length) await v.after(data);
@@ -224,6 +228,63 @@ async function loadClientPick() {
   document.querySelectorAll('.clientPick').forEach(s =>
     s.innerHTML = '<option value="">— client —</option>' + (data||[]).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join(''));
 }
+
+// ---------- Add property: full screen with client, tenancy and last inspection ----------
+async function openNewProperty() {
+  scrollTo(0, 0);
+  $('#listArea').classList.add('hidden'); $('#detail').classList.remove('hidden');
+  const { data: cl } = await sb.from('clients').select('id,name,type').order('name');
+  const grp = (t, label) => { const x = (cl || []).filter(c => (c.type === 'agency') === (t === 'agency'));
+    return x.length ? `<optgroup label="${label}">${x.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</optgroup>` : ''; };
+  $('#detailBody').innerHTML = `<h2 style="margin-top:36px">Add property</h2>
+    <form id="newProp" class="newprop">
+      <fieldset><legend>Property</legend>
+        <label class="wide">Street address *<input name="address_line" required placeholder="e.g. 12 Smith St or 3/45 Jones Rd"></label>
+        <label>Suburb *<input name="suburb" required></label>
+        <label>Postcode<input name="postcode" inputmode="numeric" maxlength="4"></label>
+        <label>Client (agent or owner) *<select name="client_id" required><option value="">— choose —</option>${grp('agency', 'Agencies')}${grp('owner', 'Owners')}</select></label>
+        <label>Levels<input name="storeys" type="number" min="1" value="1"></label>
+        <label>Bedrooms<input name="bedrooms" type="number" min="0"></label>
+        <label>Ceiling access<select name="ceiling_access"><option value="">—</option><option>Easy</option><option>Limited</option><option>None</option></select></label>
+        <label class="wide">Keys / access notes<input name="access_notes" placeholder="e.g. keys at agency, dog in yard"></label>
+      </fieldset>
+      <fieldset><legend>Tenancy <small class="muted">(optional)</small></legend>
+        <label class="wide">Tenant name(s)<input name="t_tenant_names" placeholder="e.g. Jane Smith & Tom Lee"></label>
+        <label class="chk"><input type="checkbox" name="t_owner_occupied" value="true"> Owner occupied</label>
+        <label>Mobile<input name="t_mobile" type="tel"></label>
+        <label>Email<input name="t_email" type="email"></label>
+        <label>Property manager<input name="t_property_manager"></label>
+        <label>Lease start<input name="t_lease_start" type="date"></label>
+        <label>Lease end<input name="t_lease_end" type="date"></label>
+        <label>Notices by<select name="t_notice_by"><option value="email">Email</option><option value="mail">Mail</option></select></label>
+      </fieldset>
+      <fieldset><legend>Inspections <small class="muted">(optional)</small></legend>
+        <label>Last inspection date<input name="last_done" type="date" max="${iso(new Date())}"></label>
+        <p class="muted wide">Next one is due a year after this. Leave blank and it shows as due now.</p>
+      </fieldset>
+      <p><button class="primary">Save property</button> <button type="button" id="newPropCancel">Cancel</button></p>
+    </form>`;
+  $('#newPropCancel').onclick = () => $('#back').onclick();
+  $('#newProp').onsubmit = async e => {
+    e.preventDefault();
+    const f = Object.fromEntries([...new FormData(e.target)].map(([k, v]) => [k, String(v).trim()]).filter(([, v]) => v !== ''));
+    const prop = { company_id: companyId, state: 'QLD', active: true }, ten = { company_id: companyId };
+    for (const [k, v] of Object.entries(f)) if (k.startsWith('t_')) ten[k.slice(2)] = v; else if (k !== 'last_done') prop[k] = v;
+    prop.suburb = prop.suburb.toUpperCase();
+    const btn = e.target.querySelector('button.primary'); btn.disabled = true;
+    const { data: p, error } = await sb.from('properties').insert(prop).select('id').single();
+    if (error) { btn.disabled = false; return msg(error.message); }
+    const extra = [];
+    if (ten.tenant_names) extra.push(sb.from('tenancies').insert({ ...ten, property_id: p.id }));
+    if (f.last_done) extra.push(sb.from('jobs').insert({ company_id: companyId, property_id: p.id, job_type: 'annual', status: 'completed',
+      scheduled_start: f.last_done + 'T09:00:00+10:00', completed_at: f.last_done + 'T09:00:00+10:00', approved_at: new Date().toISOString(),
+      notes: 'Previous inspection (entered when the property was added)' }));
+    const errs = (await Promise.all(extra)).map(r => r.error).filter(Boolean);
+    msg(errs.length ? 'Property saved, but: ' + errs.map(x => x.message).join('; ') : 'Property added');
+    openProperty(p.id);
+  };
+}
+$('#newPropBtn').onclick = openNewProperty;
 
 // Address search for the job form
 let propMatches = {};
@@ -1085,6 +1146,7 @@ document.querySelector('main').addEventListener('click', e => {
 $('#adminToggle').onclick = () => { const m = $('#adminMenu'); m.hidden = !m.hidden; $('#adminToggle').textContent = m.hidden ? 'Admin ▸' : 'Admin ▾'; };
 document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () => {
   tab = b.dataset.tab; page = 0; term = ''; $('#search').value = '';
+  $('#search').placeholder = tab === 'properties' ? 'Search address, agent, manager, tenant, phone or email…' : 'Search…';
   document.querySelectorAll('aside button').forEach(x => x.classList.toggle('on', x === b));
   if (b.closest('#adminMenu')) { $('#adminMenu').hidden = false; $('#adminToggle').textContent = 'Admin ▾'; }
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('hidden', t.id !== 'tab-' + tab));

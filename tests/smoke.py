@@ -129,6 +129,7 @@ def main():
         step('Prices page', lambda: (tab('prices'), page.wait_for_selector('#pxLists input[data-f="price"]', timeout=2000)))
         step('Edit a price and save', lambda: (page.fill('#pxLists input[data-f="price"]', '90'), page.click('#pxSave')))
         step('Documents page', lambda: (tab('documents'), page.wait_for_selector('#docList th', timeout=3000)))
+        step('Add property screen opens', lambda: (tab('properties'), page.click('#newPropBtn'), page.wait_for_selector('#newProp input[name=address_line]', timeout=3000), page.click('#newPropCancel')))
         for t in ['clients', 'properties', 'inspectors']:
             step(f'{t} list', lambda t=t: tab(t))
         step('Availability grid toggles', lambda: (page.wait_for_selector('#availGrid td[data-day]', timeout=2000), page.locator('#availGrid td[data-day]').first.click(),

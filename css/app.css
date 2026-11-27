@@ -147,3 +147,9 @@ a[data-prop]{color:inherit;text-decoration:none;border-bottom:1px dotted #9fb0c8
 #detailBody h3 button{font-size:13px;padding:4px 10px;margin-left:8px;vertical-align:middle}
 main button.r{background:#fbe5e4;color:var(--bad);border-color:#f3c2bf}
 #week ~ #dayView th:nth-child(1){width:64px}
+.newprop{background:none;border:0;padding:0;display:block}
+.newprop fieldset{border:1px solid var(--line);border-radius:12px;background:#fff;padding:14px 16px;margin:0 0 14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px 16px}
+.newprop legend{font-weight:800;padding:0 6px;color:var(--navy)}
+.newprop label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--muted)}
+.newprop label.wide,.newprop p.wide{grid-column:1/-1}.newprop label.chk{flex-direction:row;align-items:center;gap:8px}
+.newprop label.chk input{width:auto}
