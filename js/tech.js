@@ -280,7 +280,7 @@ function addForm() {
 $('#jobBody').addEventListener('click', async e => {
   const t = e.target.closest('button'); if (!t) return;
   if (t.dataset.act) { const it = job.items[+t.dataset.i]; it.action = it.action === t.dataset.act ? '' : t.dataset.act; return renderJob(); }
-  if (t.dataset.x) { job.extra[t.dataset.x] = t.dataset.v; return renderJob(); }
+  if (t.dataset.x) { job.extra[t.dataset.x] = job.extra[t.dataset.x] === t.dataset.v ? '' : t.dataset.v; return renderJob(); }   // tap again to clear
   if (t.dataset.remove) { job.items.splice(+t.dataset.remove, 1); return renderJob(); }
   if (t.id === 'addOpen') { job.adding = {}; renderJob(); return $('#addBox').scrollIntoView({ block: 'center' }); }
   if (t.id === 'adCancel') { job.adding = null; return renderJob(); }
