@@ -26,7 +26,7 @@ type Form9 = {
   tenants: string; address: string; suburb: string; postcode: string;
   company: string; phone: string; entering: string;
   issued: Date; visit: Date;            // notice issue time and visit date
-  timeOfEntry?: string;                 // e.g. "8am – 5pm"
+  timeOfEntry?: string;                 // e.g. "8am to 5pm"
   signature?: Uint8Array | null;        // PNG/JPG; if none, the company name is written instead
 };
 
@@ -56,7 +56,7 @@ async function fillForm9(template: Uint8Array, f: Form9): Promise<Uint8Array> {
   tick("Checkbox6");                                           // Electrical Safety Act 2002 (safety switches) – 48 hours
   set("Day 2", day(f.visit));
   set("Date (dd/mm/yyyy) 2", dmy(f.visit));
-  set("Time of entry", f.timeOfEntry ?? "8am – 5pm");
+  set("Time of entry", f.timeOfEntry ?? "8am to 5pm");
   set("Print name", f.company);
   set("Date of signature (dd/mm/yyyy)", dmy(f.issued));
 
