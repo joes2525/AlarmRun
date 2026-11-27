@@ -138,3 +138,4 @@ main:has(#detail:not(.hidden))>.tab{display:none}
 #week ~ #dayView th:nth-child(5){width:90px}#week ~ #dayView th:nth-child(6){width:85px}
 #week ~ #dayView th:nth-child(7){width:225px}
 #week ~ #dayView td{overflow:hidden;text-overflow:ellipsis}
+#dayView tr.moved td{background:#fff1c2}#dayView tr.moved td:first-child{box-shadow:inset 4px 0 var(--orange)}

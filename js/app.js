@@ -513,7 +513,7 @@ async function openDay() {
   }
   $('#dayView').innerHTML = `<h3>${esc(ins.name)} – ${nice} (${data.length}/${ins.daily_capacity})</h3>
     <div class="dayBox"><table class="grp"><tr><th>${tab === 'scheduled' ? '<input type="checkbox" id="dayAll">' : '#'}</th><th>Address</th><th>Agent</th><th>Area</th><th>Reason</th><th>Status</th><th></th><th>Notes</th></tr>` +
-    data.map((j, i) => `<tr><td>${tab === 'scheduled' ? `<input type="checkbox" class="dpick" value="${j.id}"${dayTicked.has(j.id) ? ' checked' : ''}>` : i + 1}</td><td>${esc(j.properties?.address_line)}, ${esc(j.properties?.suburb)}</td>
+    data.map((j, i) => `<tr${j.id === movedJob ? ' class="moved"' : ''}><td>${tab === 'scheduled' ? `<input type="checkbox" class="dpick" value="${j.id}"${dayTicked.has(j.id) ? ' checked' : ''}>` : i + 1}</td><td>${esc(j.properties?.address_line)}, ${esc(j.properties?.suburb)}</td>
       <td>${esc(j.properties?.clients?.name)}</td><td>${esc(areaOf[(j.properties?.suburb || '').trim().toUpperCase()] || '')}</td>
       <td>${(r => `<span class="why why-${r.toLowerCase().replace(/\s+/g, '-')}">${esc(r)}</span>`)(label[j.job_type] || j.job_type)}</td><td>${esc(j.status)}</td>
       <td>${j.status === 'booked' ? `<button data-unbook="${j.id}" data-type="${j.job_type}">Unbook</button>` : ''}
@@ -551,14 +551,16 @@ $('#doCancel').onclick = () => {
 };
 
 const unbook = ids => sb.from('jobs').update({ status: 'booked', inspector_id: null, scheduled_start: null, route_order: null }).in('id', [].concat(ids));
-let dayJobIds = [];
+let dayJobIds = [], movedJob = null;
 $('#dayView').addEventListener('click', async e => {
   const up = e.target.dataset.up, down = e.target.dataset.down;
   if (up == null && down == null) return;
   const i = +(up ?? down), k = up != null ? i - 1 : i + 1;
   [dayJobIds[i], dayJobIds[k]] = [dayJobIds[k], dayJobIds[i]];
+  movedJob = dayJobIds[k];
   const rows = [...document.querySelectorAll('#dayView tr:has(td)')];   // swap rows on screen straight away
   if (up != null) rows[i].after(rows[k]); else rows[k].after(rows[i]);
+  rows.forEach(r => r.classList.remove('moved')); rows[i].classList.add('moved');
   document.querySelectorAll('#dayView button[data-up],#dayView button[data-down]').forEach(b => b.disabled = true);   // until saved
   await Promise.all(dayJobIds.map((id, n) => sb.from('jobs').update({ route_order: n + 1 }).eq('id', id)));
   openDay();
