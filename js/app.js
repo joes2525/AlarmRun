@@ -1009,6 +1009,10 @@ async function loadCompleted() {
       : '<p style="color:#555">None in this period.</p>'}</details>`).join('');
 }
 $('#doneFilter').onsubmit = e => { e.preventDefault(); loadCompleted(); };
+$('#doneFilter').onchange = e => { if (e.target.type === 'date') loadCompleted(); };   // no Show button: dates reload straight away
+let doneTimer; $('#doneFilter').q.oninput = () => { clearTimeout(doneTimer); doneTimer = setTimeout(loadCompleted, 400); };
+$('#apprToggle').onclick = () => { const c = $('#doneFilter').showApproved; c.checked = !c.checked;
+  $('#apprToggle').textContent = c.checked ? 'Hide approved' : 'Show approved'; loadCompleted(); };
 // Approve: blue → green, saved in the background
 let doneGroups = [];
 async function setApproved(ids, on) {

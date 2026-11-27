@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap">
-<link rel="stylesheet" href="css/app.css?v=2611271558">
+<link rel="stylesheet" href="css/app.css?v=2611271600">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611271558"></script>
+<script src="config.js?v=2611271600"></script>
 </head>
 <body>
 <h1>AlarmRun – Office</h1>
@@ -178,8 +178,8 @@
     <form id="doneFilter">
       <label>From <input type="date" name="from"></label> <label>to <input type="date" name="to"></label>
       <input name="q" placeholder="Address, suburb or agent">
-      <label style="white-space:nowrap"><input type="checkbox" name="showApproved" style="width:auto"> Show approved</label>
-      <button>Show</button>
+      <input type="checkbox" name="showApproved" hidden>
+      <button type="button" id="apprToggle">Show approved</button>
     </form>
     <div id="doneLists"></div>
   </div>
@@ -283,6 +283,6 @@
   </main>
 </section>
 
-<script src="js/app.js?v=2611271558"></script>
+<script src="js/app.js?v=2611271600"></script>
 </body>
 </html>
