@@ -92,7 +92,7 @@ async function openProperty(id) {
     sb.from('tenancies').select('*').eq('property_id', id).order('lease_start', { ascending: false, nullsFirst: false }),
   ]);
   const [nq, iq] = await Promise.all([
-    sb.from('messages').select('id,kind,channel,to_name,to_address,status,error,for_date,send_after,sent_at,body').eq('property_id', id)
+    sb.from('messages').select('id,kind,channel,to_name,to_address,status,error,for_date,send_after,sent_at,body,attachment_path').eq('property_id', id)
       .or('kind.like.entry_notice*,kind.eq.reminder').order('send_after', { ascending: false }).limit(50),
     sb.from('invoices').select('number,amount_ex_gst,gst,status,created_at,clients(name),jobs!inner(property_id)').eq('jobs.property_id', id).order('created_at', { ascending: false }).limit(50)]);
   const notices = nq.data || [], invs = iq.data || [];
@@ -149,7 +149,7 @@ async function openProperty(id) {
       <td>${date(m.for_date)}</td><td>${esc((m.kind || '').replace('entry_notice_changed', 'Date changed').replace('entry_notice', 'Entry notice').replace('reminder', 'Reminder'))}</td>
       <td>${esc(m.channel)}</td><td>${esc(m.to_name)}<br><small>${esc(m.to_address)}</small></td>
       <td>${m.status === 'failed' ? `<span class="bad">Failed</span>${m.error ? `<br><small>${esc(m.error)}</small>` : ''}` : m.status === 'cancelled' ? '<span class="muted">Deleted</span>' : esc(m.status === 'sent' ? (m.channel === 'mail' ? 'Posted' : 'Sent') : 'Queued')}</td>
-      <td>${m.sent_at ? date(m.sent_at) : `<small class="muted">due ${date(m.send_after)}</small>`}</td><td><a href="#" data-pmsg="${m.id}">View</a></td></tr>`).join('')}</table>` : '<p class="muted">No entry notices yet.</p>'}
+      <td>${m.sent_at ? date(m.sent_at) : `<small class="muted">due ${date(m.send_after)}</small>`}</td><td style="white-space:nowrap"><a href="#" data-pmsg="${m.id}">View</a>${m.attachment_path ? ` · <a href="#" data-pdf="${esc(m.attachment_path)}">Form 9</a>` : ''}</td></tr>`).join('')}</table>` : '<p class="muted">No entry notices yet.</p>'}
     <h3>Invoices (${invs.length})</h3>
     ${invs.length ? `<table><tr><th>Date</th><th>Number</th><th>Client</th><th>Amount (inc GST)</th><th>Status</th></tr>${invs.map(v => `<tr>
       <td>${date(v.created_at)}</td><td>${esc(v.number)}</td><td>${esc(v.clients?.name)}</td><td>${money(Number(v.amount_ex_gst) + Number(v.gst || 0))}</td><td>${esc(v.status)}</td></tr>`).join('')}</table>`
@@ -1068,6 +1068,14 @@ $('#back').onclick = () => {
   if (['due', 'book', 'scheduled'].includes(tab)) return openSchedule();      // opened from Due/Book/Scheduled: go back there
   $('#listArea').classList.remove('hidden'); loadList();
 };
+// saved PDFs (e.g. the Form 9 sent with an entry notice) open in a new tab
+document.querySelector('main').addEventListener('click', async e => {
+  const a = e.target.closest('a[data-pdf]'); if (!a) return; e.preventDefault();
+  const w = open('', '_blank');
+  const { data, error } = await sb.storage.from('photos').createSignedUrl(a.dataset.pdf, 600);
+  if (error) { w?.close(); return msg(error.message); }
+  if (w) w.location = data.signedUrl; else location.href = data.signedUrl;
+});
 // address links on Due / Book / Scheduled open the property card
 document.querySelector('main').addEventListener('click', e => {
   const a = e.target.closest('a[data-prop]'); if (!a) return;
@@ -1124,7 +1132,7 @@ async function loadDocs() {
   const type = $('#docType').value, t = $('#docSearch').value.trim(), n = (docPage + 1) * DOCS;
   const cq = sb.from('certificates').select('job_id,number,compliant,issued_at,jobs(properties(address_line,suburb))', { count: 'exact' }).order('issued_at', { ascending: false }).limit(n);
   const iq = sb.from('invoices').select('number,amount_ex_gst,gst,status,created_at,clients(name)', { count: 'exact' }).order('created_at', { ascending: false }).limit(n);
-  const mq = sb.from('messages').select('id,kind,channel,to_name,to_address,status,sent_at,send_after,for_date,body,properties(address_line,suburb)', { count: 'exact' })
+  const mq = sb.from('messages').select('id,kind,channel,to_name,to_address,status,sent_at,send_after,for_date,body,attachment_path,properties(address_line,suburb)', { count: 'exact' })
     .like('kind', 'entry_notice%').neq('status', 'cancelled').order('send_after', { ascending: false }).limit(n);
   if (t) { cq.ilike('number', `%${t}%`); iq.ilike('number', `%${t}%`); mq.or(`to_name.ilike.%${t}%,to_address.ilike.%${t}%`); }
   const none = { data: [], count: 0 };
@@ -1137,14 +1145,14 @@ async function loadDocs() {
       info: `${money(Number(r.amount_ex_gst) + Number(r.gst || 0))} inc GST · ${esc(r.status)}` })),
     ...m.data.map(r => ({ d: r.sent_at || r.send_after, type: r.kind === 'entry_notice_changed' ? 'Entry notice (date changed)' : 'Entry notice', num: r.channel === 'mail' ? 'Letter' : r.channel === 'sms' ? 'Text' : 'Email',
       who: [r.properties?.address_line, r.properties?.suburb].filter(Boolean).join(', '),
-      info: `Visit ${date(r.for_date)} · ${r.status === 'sent' ? (r.channel === 'mail' ? 'posted' : 'sent') : esc(r.status)}`, view: r.id }))]
+      info: `Visit ${date(r.for_date)} · ${r.status === 'sent' ? (r.channel === 'mail' ? 'posted' : 'sent') : esc(r.status)}`, view: r.id, pdf: r.attachment_path }))]
     .sort((a, b) => String(b.d).localeCompare(String(a.d))).slice(docPage * DOCS, n);
   const total = (c.count || 0) + (i.count || 0) + (m.count || 0), pages = Math.max(1, Math.ceil(total / DOCS));
   $('#docInfo').textContent = ` Page ${docPage + 1} of ${pages} (${total}) `;
   $('#docPrev').disabled = docPage === 0; $('#docNext').disabled = docPage + 1 >= pages;
   $('#docList').innerHTML = '<tr><th>Date</th><th>Type</th><th>Number</th><th>Property / client</th><th>Details</th><th></th></tr>' +
     rows.map(r => `<tr><td>${date(r.d)}</td><td>${r.type}</td><td>${esc(r.num)}</td><td>${esc(r.who)}</td><td>${r.info}</td>
-      <td>${r.link ? `<a href="${r.link}" target="_blank">Open</a>` : r.view ? `<a href="#" data-docmsg="${r.view}">View</a>` : ''}</td></tr>`).join('');
+      <td>${r.link ? `<a href="${r.link}" target="_blank">Open</a>` : r.view ? `<a href="#" data-docmsg="${r.view}">View</a>${r.pdf ? ` · <a href="#" data-pdf="${esc(r.pdf)}">Form 9</a>` : ''}` : ''}</td></tr>`).join('');
 }
 let docMsgs = {};
 $('#docList').onclick = e => {   // show an entry notice's text under its row

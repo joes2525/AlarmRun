@@ -128,6 +128,10 @@ Deno.serve(async (req) => {
           issued: new Date(), visit: new Date(j.scheduled_start ?? `${m.for_date}T00:00:00+10:00`),
         });
         attachments = [{ filename: `Entry notice - ${p.address_line ?? "property"}.pdf`, content: encodeBase64(pdf) }];
+        // keep a copy of exactly what the tenant got (best effort – the email still goes if this fails)
+        const path = `${m.company_id}/notices/${m.id}.pdf`;
+        const { error: upErr } = await db.storage.from("photos").upload(path, pdf, { contentType: "application/pdf", upsert: true });
+        if (!upErr) await db.from("messages").update({ attachment_path: path }).eq("id", m.id);
       } catch (e) {
         const attempts = (m.attempts ?? 0) + 1;     // don't send a notice without its form
         await db.from("messages").update({ attempts, error: "Form 9: " + (e as Error).message, status: attempts >= MAX_ATTEMPTS ? "failed" : "queued" }).eq("id", m.id);
