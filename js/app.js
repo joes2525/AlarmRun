@@ -80,13 +80,14 @@ async function loadList() {
 }
 
 // Property detail: info + alarms + history
+let alarmEditing = false;
 async function openProperty(id) {
   scrollTo(0, 0);
   $('#listArea').classList.add('hidden'); $('#detail').classList.remove('hidden');
   document.querySelectorAll('.tab form').forEach(f => f.classList.add('hidden'));
   const [{ data: p }, { data: alarms }, { data: jobs }, { data: ten }] = await Promise.all([
     sb.from('properties').select('*,clients(name)').eq('id', id).single(),
-    sb.from('alarms').select('*').eq('property_id', id).order('location'),
+    sb.from('alarms').select('*').eq('property_id', id).not('active', 'is', false).order('location'),
     sb.from('jobs').select('job_type,status,scheduled_start,notes,certificates(number,compliant)').eq('property_id', id).order('scheduled_start', { ascending: false }),
     sb.from('tenancies').select('*').eq('property_id', id).order('lease_start', { ascending: false, nullsFirst: false }),
   ]);
@@ -104,33 +105,35 @@ async function openProperty(id) {
       <button>Save notes</button></form>
     <form id="breakdownForm"><select name="job_type"><option value="callout">Breakdown</option><option value="work_order">Work order</option><option value="upgrade">Upgrade</option><option value="pre_tenancy">Lease</option><option value="sale">Sale</option><option value="install">Install</option></select>
       <input name="notes" placeholder="Details e.g. hallway alarm beeping" size="45" required><button>Log job</button></form>
-    <h3>Tenancies (${ten.length})</h3>
+    <h3>Tenancies (${ten.length}) <button type="button" id="tenAddBtn" class="small">+ Add tenancy</button></h3>
     <table><tr><th>Tenants</th><th>Mobile</th><th>Email</th><th>Notices by</th><th>Move in</th><th>Lease</th><th>Vacate</th><th>PM</th></tr>
     ${ten.map(t => `<tr><td>${esc(t.tenant_names)}${t.owner_occupied ? ' <span class="tag">Owner occupied</span>' : ''}</td><td>${esc(t.mobile)}${(t.extra_phones || []).map(x => '<br><small>' + esc(x) + '</small>').join('')}</td><td>${esc(t.email)}${(t.extra_emails || []).map(x => '<br><small>' + esc(x) + '</small>').join('')}</td><td><select data-noticeby="${t.id}"><option value="email"${t.notice_by !== 'mail' ? ' selected' : ''}>Email</option><option value="mail"${t.notice_by === 'mail' ? ' selected' : ''}>Mail</option></select></td><td>${date(t.move_in)}</td>
       <td>${date(t.lease_start)} → ${leaseEnd(t.lease_end)}</td><td>${date(t.vacate_date)}</td><td>${esc(t.property_manager)}</td></tr>
       ${t.tenant_notes ? `<tr><td colspan="9"><b>Tenant's notes:</b> ${esc(t.tenant_notes)}</td></tr>` : ''}`).join('')}</table>
     ${changes.length ? `<details><summary>Changes made by tenants (${changes.length})</summary><table>${changes.map(c =>
       `<tr><td style="white-space:nowrap">${new Date(c.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td><td>${esc(c.what)}</td></tr>`).join('')}</table></details>` : ''}
-    <form id="tenForm">
+    <form id="tenForm" class="hidden">
       <input name="tenant_names" placeholder="Tenant name(s)" required>
+      <label><input name="owner_occupied" type="checkbox" value="true" style="width:auto"> Owner occupied</label>
       <input name="mobile" placeholder="Mobile">
       <input name="email" type="email" placeholder="Email">
       <label>Lease start <input name="lease_start" type="date"></label>
       <label>Lease end <input name="lease_end" type="date"></label>
-      <label><input name="owner_occupied" type="checkbox" value="true" style="width:auto"> Owner occupied</label>
-      <button>Add tenancy</button>
+      <button class="primary">Save tenancy</button>
     </form>
-    <h3>Alarms (${alarms.length})</h3>
-    <table><tr><th>Location</th><th>Type</th><th>Power</th><th>Brand</th><th>Expires</th></tr>
+    <h3>Alarms (${alarms.length}) <button type="button" id="alarmEdit">${alarmEditing ? 'Done' : 'Edit alarms'}</button>
+      ${alarmEditing ? '<button type="button" id="alarmAdd">+ Add alarm</button>' : ''}</h3>
+    <table><tr><th>Location</th><th>Type</th><th>Power</th><th>Brand</th><th>Expires</th>${alarmEditing ? '<th></th>' : ''}</tr>
     ${alarms.map(a => `<tr><td>${esc(a.location)}</td><td>${esc(a.sensor_type)}</td><td>${esc(a.power_source)}</td><td>${esc(a.brand)}</td>
-      <td class="${a.expiry_date && a.expiry_date < today ? 'bad' : ''}">${date(a.expiry_date)}</td></tr>`).join('')}</table>
-    <form id="alarmForm">
+      <td class="${a.expiry_date && a.expiry_date < today ? 'bad' : ''}">${date(a.expiry_date)}</td>
+      ${alarmEditing ? `<td style="white-space:nowrap"><button type="button" data-acopy="${a.id}" title="New alarm with the same type, power and brand">Copy</button> <button type="button" data-adel="${a.id}" class="r">Delete</button></td>` : ''}</tr>`).join('')}</table>
+    <form id="alarmForm" class="hidden">
       <input name="location" placeholder="Location e.g. Bedroom 1" required>
       <select name="sensor_type"><option>photoelectric</option><option>ionisation</option><option>heat</option><option>other</option></select>
       <select name="power_source"><option>hardwired</option><option>10yr_lithium</option><option>9v</option><option>other</option></select>
       <input name="brand" placeholder="Brand">
-      <input name="manufacture_date" type="date" title="Manufacture date">
-      <button>Add alarm</button>
+      <label>Manufactured <input name="manufacture_date" type="date"></label>
+      <button class="primary">Save alarm</button>
     </form>
     <h3>Inspection history (${jobs.length})</h3>
     <table><tr><th>Date</th><th>Type</th><th>Status</th><th>Certificate</th><th>Notes</th></tr>
@@ -167,6 +170,23 @@ async function openProperty(id) {
     if (error) return msg(error.message);
     msg('Tenancy added'); openProperty(id);
   };
+  $('#tenAddBtn').onclick = () => { $('#tenForm').classList.toggle('hidden'); $('#tenForm').tenant_names.focus(); };
+  $('#alarmEdit').onclick = () => { alarmEditing = !alarmEditing; openProperty(id); };
+  const af = $('#alarmForm'), openAlarmForm = () => { af.classList.remove('hidden'); af.location.focus(); };
+  if ($('#alarmAdd')) $('#alarmAdd').onclick = () => { af.reset(); openAlarmForm(); };
+  $('#detailBody').querySelectorAll('[data-acopy]').forEach(b => b.onclick = () => {   // same type/power/brand, new location + date
+    const a = alarms.find(x => x.id === b.dataset.acopy);
+    af.reset(); af.sensor_type.value = a.sensor_type || 'photoelectric'; af.power_source.value = a.power_source || 'hardwired'; af.brand.value = a.brand || '';
+    openAlarmForm(); msg('Copied – add the location and manufacture date');
+  });
+  $('#detailBody').querySelectorAll('[data-adel]').forEach(b => b.onclick = async () => {
+    const a = alarms.find(x => x.id === b.dataset.adel);
+    if (!confirm(`Delete the ${a.location || ''} alarm?`)) return;
+    let { error } = await sb.from('alarms').delete().eq('id', a.id);
+    if (error) ({ error } = await sb.from('alarms').update({ active: false }).eq('id', a.id));   // has inspection history: hide it instead
+    if (error) return msg(error.message);
+    msg('Alarm deleted'); openProperty(id);
+  });
   $('#alarmForm').onsubmit = async e => {
     e.preventDefault();
     const row = { company_id: companyId, property_id: id };
