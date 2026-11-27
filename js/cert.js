@@ -19,7 +19,7 @@ async function load() {
       alarm_checks(action, replace_reason, quote, photo_path, action_price, alarms(location, sensor_type, power_source, brand, manufacture_date, expiry_date))`).eq('id', id).single();
   if (error) return $('#msg').textContent = error.message;
   const [{ data: co }, { data: words }] = await Promise.all([
-    sb.from('companies').select('name, sender_name, phone, reply_to_email, abn, qbcc_licence').eq('id', j.company_id).single(),
+    sb.from('companies').select('name, sender_name, phone, reply_to_email, abn, qbcc_licence, bank_account_name, bank_bsb, bank_account_number, payment_terms_days').eq('id', j.company_id).single(),
     sb.from('templates').select('kind, body').eq('channel', 'doc').in('kind', ['cert_compliant', 'cert_non_compliant'])]);
   const p = j.properties || {}, cert = [].concat(j.certificates || [])[0] || {}, ok = cert.compliant;
   const today = new Date().toISOString().slice(0, 10);
@@ -76,7 +76,7 @@ async function load() {
   $('#inv').hidden = !lines.length;
   if (lines.length) {
     const total = lines.reduce((t, l) => t + l.amt, 0), gst = total / 11, m = v => '$' + v.toFixed(2);
-    const issued = j.approved_at || new Date().toISOString(), due = new Date(new Date(issued).getTime() + 14 * 864e5);
+    const issued = j.approved_at || new Date().toISOString(), terms = co?.payment_terms_days ?? 14, due = new Date(new Date(issued).getTime() + terms * 864e5);
     const cl = p.clients || {}, owner = p.owner_name || (cl.type && cl.type !== 'agency' ? cl.name : '');
     $('#inv').innerHTML = `<div class="inv">
       <header>
@@ -92,8 +92,9 @@ async function load() {
       <table class="tot"><tr><td>Subtotal (ex GST)</td><td class="n">${m(total - gst)}</td></tr><tr><td>GST</td><td class="n">${m(gst)}</td></tr>
         <tr><td>Total (inc GST)</td><td class="n">${m(total)}</td></tr></table>
       <p><small>Total price includes GST.</small></p>
-      <div class="pay"><b>Payment</b> – please pay within 14 days, quoting INV-${esc(String(cert.number || '').split('-').pop())}.<br>
-        Bank details: <i>to be added in Settings</i></div>
+      <div class="pay"><b>Payment</b> – please pay within ${terms} days, quoting INV-${esc(String(cert.number || '').split('-').pop())} as the reference.<br>
+        ${co?.bank_account_number ? `Account name: <b>${esc(co.bank_account_name || co.name)}</b> · BSB: <b>${esc(co.bank_bsb || '')}</b> · Account: <b>${esc(co.bank_account_number)}</b>`
+          : '<span class="bad">Bank details missing – add them in Settings</span>'}</div>
       <footer>${esc(co?.sender_name || co?.name)}${co?.abn ? ' · ABN ' + esc(co.abn) : ''} · Tax invoice</footer></div>`;
   }
   // inspection photos on a second page

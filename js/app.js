@@ -904,7 +904,7 @@ $('#tplSave').onclick = async () => {
 // ---------- Company settings ----------
 const PLATFORM_DOMAIN = 'yourdomain.com.au';   // change when the real sending domain is set up
 async function loadCompany() {
-  const { data, error } = await sb.from('companies').select('name,sender_name,sender_code,reply_to_email,phone,abn,qbcc_licence,signature').eq('id', companyId).single();
+  const { data, error } = await sb.from('companies').select('name,sender_name,sender_code,reply_to_email,phone,abn,qbcc_licence,signature,bank_account_name,bank_bsb,bank_account_number,payment_terms_days').eq('id', companyId).single();
   if (error) return msg(error.message);
   const f = $('#coForm'); for (const k in data) if (f[k]) f[k].value = data[k] ?? '';
   coPreview(); showSig(data.signature);
@@ -936,6 +936,7 @@ $('#coForm').oninput = coPreview;
 $('#coForm').onsubmit = async e => {
   e.preventDefault();
   const row = {}; for (const [k, v] of new FormData(e.target)) row[k] = v.trim() || null;
+  row.payment_terms_days = +row.payment_terms_days || 14;
   const { error } = await sb.from('companies').update(row).eq('id', companyId);
   msg(error ? error.message : 'Settings saved');
 };

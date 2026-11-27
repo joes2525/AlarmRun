@@ -237,6 +237,11 @@
       <label>Phone</label><input name="phone">
       <label>ABN</label><input name="abn">
       <label>QBCC licence</label><input name="qbcc_licence">
+      <label style="grid-column:1/-1;font-weight:800;color:var(--navy);margin-top:8px">Bank details for invoices</label>
+      <label>Account name</label><input name="bank_account_name">
+      <label>BSB</label><input name="bank_bsb" placeholder="e.g. 064-000" pattern="\d{3}-?\d{3}" title="6 digits, e.g. 064-000">
+      <label>Account number</label><input name="bank_account_number" inputmode="numeric">
+      <label>Payment terms (days)</label><input name="payment_terms_days" type="number" min="0" max="120" placeholder="14">
       <span></span><button class="primary" style="justify-self:start">Save</button>
     </form>
     <p id="coPreview" style="margin-top:14px;background:#f4f4f4;padding:10px;max-width:640px"></p>
