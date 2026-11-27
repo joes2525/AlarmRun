@@ -1248,8 +1248,8 @@ async function loadDocs() {
   const type = $('#docType').value, t = $('#docSearch').value.trim(), n = (docPage + 1) * DOCS;
   const cq = sb.from('certificates').select('job_id,number,compliant,issued_at,jobs(properties(address_line,suburb))', { count: 'exact' }).order('issued_at', { ascending: false }).limit(n);
   const iq = sb.from('invoices').select('number,amount_ex_gst,gst,status,created_at,clients(name)', { count: 'exact' }).order('created_at', { ascending: false }).limit(n);
-  const mq = sb.from('messages').select('id,kind,channel,to_name,to_address,status,sent_at,send_after,for_date,body,attachment_path,properties(address_line,suburb)', { count: 'exact' })
-    .like('kind', 'entry_notice%').neq('status', 'cancelled').order('send_after', { ascending: false }).limit(n);
+  const mq = sb.from('messages').select('id,kind,channel,to_name,to_address,status,sent_at,send_after,created_at,for_date,body,attachment_path,properties(address_line,suburb)', { count: 'exact' })
+    .like('kind', 'entry_notice%').neq('status', 'cancelled').order('created_at', { ascending: false }).limit(n);
   if (t) { cq.ilike('number', `%${t}%`); iq.ilike('number', `%${t}%`); mq.or(`to_name.ilike.%${t}%,to_address.ilike.%${t}%`); }
   const none = { data: [], count: 0 };
   const [c, i, m] = await Promise.all([type && type !== 'cert' ? none : cq, type && type !== 'inv' ? none : iq, type && type !== 'notice' ? none : mq]);
@@ -1259,9 +1259,9 @@ async function loadDocs() {
       info: r.compliant ? '<span class=good>Compliant</span>' : '<span class=bad>Non-compliant</span>', link: `cert.html?job=${r.job_id}` })),
     ...i.data.map(r => ({ d: r.created_at, type: 'Invoice', num: r.number, who: r.clients?.name || '',
       info: `${money(Number(r.amount_ex_gst) + Number(r.gst || 0))} inc GST · ${esc(r.status)}` })),
-    ...m.data.map(r => ({ d: r.sent_at || r.send_after, type: r.kind === 'entry_notice_changed' ? 'Entry notice (date changed)' : 'Entry notice', num: r.channel === 'mail' ? 'Letter' : r.channel === 'sms' ? 'Text' : 'Email',
+    ...m.data.map(r => ({ d: r.created_at, type: r.kind === 'entry_notice_changed' ? 'Entry notice (date changed)' : 'Entry notice', num: r.channel === 'mail' ? 'Letter' : r.channel === 'sms' ? 'Text' : 'Email',
       who: [r.properties?.address_line, r.properties?.suburb].filter(Boolean).join(', '),
-      info: `Visit ${date(r.for_date)} · ${r.status === 'sent' ? (r.channel === 'mail' ? 'posted' : 'sent') : esc(r.status)}`, view: r.id, pdf: r.attachment_path }))]
+      info: `Visit ${date(r.for_date)} · ${r.status === 'sent' ? (r.channel === 'mail' ? 'posted ' : 'sent ') + date(r.sent_at) : r.status === 'queued' ? 'sends ' + date(r.send_after) : esc(r.status)}`, view: r.id, pdf: r.attachment_path }))]
     .sort((a, b) => String(b.d).localeCompare(String(a.d))).slice(docPage * DOCS, n);
   const total = (c.count || 0) + (i.count || 0) + (m.count || 0), pages = Math.max(1, Math.ceil(total / DOCS));
   $('#docInfo').textContent = ` Page ${docPage + 1} of ${pages} (${total}) `;
