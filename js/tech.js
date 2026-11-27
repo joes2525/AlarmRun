@@ -202,11 +202,11 @@ function renderJob() {
     <div class="card" id="addBox">${job.adding ? addForm() : '<button class="primary" id="addOpen" style="background:#323f4b">➕ Add</button>'}</div>
 
     <div class="card"><h3>Blind cleats</h3>
-      <div class="seg">${['Compliant', 'Needed', 'Installed'].map(v => `<button data-x="blind_cleats" data-v="${v}" class="${x.blind_cleats === v ? 'on' : ''}">${v}</button>`).join('')}</div>
+      <div class="seg">${['Compliant', 'Needed', 'Installed'].map(v => `<button data-x="blind_cleats" data-v="${v}" class="${{ Compliant: 'act-g', Needed: 'act-y', Installed: 'act-b' }[v]}${x.blind_cleats === v ? ' on' : ''}">${v}</button>`).join('')}</div>
       ${['Needed', 'Installed'].includes(x.blind_cleats) ? `<label class="muted">How many ${x.blind_cleats === 'Needed' ? 'needed (quoted)' : 'installed (invoiced)'}?</label>
         <input type="number" min="1" data-xi="blind_cleats_needed" value="${esc(x.blind_cleats_needed || '')}">` : ''}
       <h3 style="margin-top:12px">Safety switch</h3>
-      <div class="seg">${['Tested OK', 'Failed', 'No safety switch', 'Not tested'].map(v => `<button data-x="safety_switch" data-v="${v}" class="${x.safety_switch === v ? 'on' : ''}">${v}</button>`).join('')}</div>
+      <div class="seg">${['Tested OK', 'Failed', 'No safety switch', 'Not tested'].map(v => `<button data-x="safety_switch" data-v="${v}" class="${{ 'Tested OK': 'act-g', Failed: 'act-r', 'No safety switch': 'act-r', 'Not tested': 'act-y' }[v]}${x.safety_switch === v ? ' on' : ''}">${v}</button>`).join('')}</div>
       ${x.safety_switch === 'Not tested' ? `<textarea rows="2" data-xi="safety_switch_notes" placeholder="Why wasn't it tested?">${esc(x.safety_switch_notes || '')}</textarea>` : ''}
     </div>
 
