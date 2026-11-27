@@ -38,9 +38,6 @@ async function load() {
     <div class="card"><h2>Phone numbers</h2>${list(d.main_phone, d.phones, 'phone')}
       <div class="row"><input id="newPhone" type="tel" placeholder="Add another phone"><button class="g" data-add="phone">Add</button></div></div>
 
-    <div class="card"><h2>See your full details</h2>
-      <p class="muted">For your privacy, details are partly hidden here. We can email the full list to the main email on file.</p>
-      <button class="g" id="sendDetails">Email me my full details</button></div>
     <p class="muted">Everyone already on file is told by email when contact details change.</p>`;
 }
 
@@ -59,10 +56,6 @@ document.addEventListener('click', async e => {
   } else if (b.dataset.rm) {
     if (!confirm('Remove this ' + b.dataset.rm + '?')) return;
     if (await call('tenant_portal_contact', { p_kind: b.dataset.rm, p_action: 'remove', p_value: '', p_index: +b.dataset.i })) { say('Removed'); load(); }
-  } else if (b.id === 'sendDetails') {
-    b.disabled = true;
-    const r = await call('tenant_portal_send_details', {});
-    if (r) say('We\'ll email it to ' + r.sent_to + ' with our next send');
   }
 });
 load();
