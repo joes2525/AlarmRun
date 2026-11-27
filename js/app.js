@@ -238,7 +238,7 @@ async function loadInspectors() {
 }
 function drawInspectors() {
   const inp = (n, v, t = 'text', ph = '') => `<input name="${n}" type="${t}" value="${esc(v ?? '')}" placeholder="${esc(ph)}"${t === 'number' ? ' min="1" style="width:80px"' : ''}>`;
-  $('#insTable').innerHTML = '<tr><th>First name</th><th>Last name</th><th title="Used in entry notices and texts to tenants">Name for tenants</th><th>Email</th><th>Phone</th><th>Home suburb</th><th>Jobs/day</th><th>Active</th><th></th></tr>' +
+  $('#insTable').innerHTML = '<tr><th>First name</th><th>Last name</th><th title="Used in entry notices and texts to tenants">Short name</th><th>Email</th><th>Phone</th><th>Home suburb</th><th>Jobs/day</th><th>Active</th><th></th></tr>' +
     insRows.map(r => r.id === insEditing
       ? `<tr class="editing" data-id="${r.id}"><td>${inp('first_name', r.first_name ?? r.name)}</td><td>${inp('last_name', r.last_name)}</td>
           <td>${inp('known_as', r.known_as, 'text', 'same as first name')}</td><td>${inp('email', r.email, 'email')}</td><td>${inp('phone', r.phone)}</td>
