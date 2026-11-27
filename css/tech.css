@@ -66,3 +66,4 @@ button.primary,.seg button.on{background:var(--blue);border-color:var(--blue)}
 .day .count{color:var(--blue)}
 .tag.bad,.bad,#msg{color:var(--bad)}
 .photo-ok{color:var(--ok)}
+.card.moved{background:#fff1c2;border-color:#f0d27a;box-shadow:inset 4px 0 var(--orange)}

@@ -100,9 +100,9 @@ async function loadRun() {
 }
 
 // ---------- reorder ----------
-let runJobs = [], reordering = false;
+let runJobs = [], reordering = false, movedId = null;
 $('#reorder').onclick = async () => {
-  if (!reordering) { reordering = true; $('#reorder').textContent = '✓ Save order'; return drawReorder(); }
+  if (!reordering) { reordering = true; movedId = null; $('#reorder').textContent = '✓ Save order'; return drawReorder(); }
   const todo = runJobs.filter(j => ['booked', 'in_progress'].includes(j.status)), done = runJobs.length - todo.length;
   $('#reorder').disabled = true;
   const res = await Promise.all(todo.map((j, i) => sb.from('jobs').update({ route_order: done + i + 1 }).eq('id', j.id)));
@@ -111,7 +111,7 @@ $('#reorder').onclick = async () => {
 };
 function drawReorder() {
   const todo = runJobs.filter(j => ['booked', 'in_progress'].includes(j.status));
-  $('#jobs').innerHTML = '<p class="muted">Move jobs up or down, then tap Save order.</p>' + todo.map((j, i) => `<div class="card day">
+  $('#jobs').innerHTML = '<p class="muted">Move jobs up or down, then tap Save order.</p>' + todo.map((j, i) => `<div class="card day${j.id === movedId ? ' moved' : ''}">
     <div><b>${i + 1}. ${esc(j.properties?.address_line)}</b><div class="muted">${esc(j.properties?.suburb)}</div></div>
     <div style="display:flex;gap:6px"><button data-mv="${i}" data-d="-1" ${i ? '' : 'disabled'}>▲</button><button data-mv="${i}" data-d="1" ${i < todo.length - 1 ? '' : 'disabled'}>▼</button></div></div>`).join('');
 }
@@ -121,7 +121,8 @@ $('#jobs').addEventListener('click', e => {
   const todo = runJobs.filter(j => ['booked', 'in_progress'].includes(j.status)), rest = runJobs.filter(j => !todo.includes(j));
   const i = +b.dataset.mv, k = i + +b.dataset.d;
   [todo[i], todo[k]] = [todo[k], todo[i]];
-  runJobs = [...rest, ...todo]; drawReorder();
+  movedId = todo[k].id; runJobs = [...rest, ...todo]; drawReorder();
+  document.querySelector('#jobs .moved')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }, true);
 
 $('#jobs').onclick = e => { const c = e.target.closest('[data-job]'); if (c) openJob(c.dataset.job); };
