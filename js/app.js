@@ -90,7 +90,7 @@ async function openProperty(id) {
   $('#listArea').classList.add('hidden'); $('#detail').classList.remove('hidden');
   document.querySelectorAll('.tab form').forEach(f => f.classList.add('hidden'));
   const [{ data: p }, { data: alarms }, { data: jobs }, { data: ten }] = await Promise.all([
-    sb.from('properties').select('*,clients(name)').eq('id', id).single(),
+    sb.from('properties').select('*,clients(name,type)').eq('id', id).single(),
     sb.from('alarms').select('*').eq('property_id', id).not('active', 'is', false).order('location'),
     sb.from('jobs').select('id,job_type,status,scheduled_start,completed_at,notes,certificates(number,compliant)').eq('property_id', id).order('scheduled_start', { ascending: false }),
     sb.from('tenancies').select('*').eq('property_id', id).order('lease_start', { ascending: false, nullsFirst: false }),
@@ -107,7 +107,8 @@ async function openProperty(id) {
     <div class="phead">${pic ? `<img src="${pic}" alt="">` : '<div class="nophoto">🏠</div>'}
       <label class="photobtn"><input type="file" accept="image/*" id="propPhoto" hidden>📷 ${pic ? 'Change' : 'Add'} photo</label></div>
     <h2>${esc(p.address_line)}, ${esc(p.suburb)} ${esc(p.postcode)}</h2>
-    <p><b>Agency:</b> ${esc(p.clients?.name)} &nbsp; <b>Next due:</b> ${date(p.next_due)}<br>
+    <p><b>${p.clients?.type === 'agency' ? 'Agency' : 'Client'}:</b> ${esc(p.clients?.name)} &nbsp;
+      <b>Owner:</b> ${esc(p.owner_name || (p.clients?.type !== 'agency' ? p.clients?.name || '' : 'c/- ' + (p.clients?.name || '')))} <a href="#" id="ownerEdit">edit</a><br>
     <b>Notes:</b> ${esc(p.access_notes)}</p>
     <form id="propNotesForm" style="display:block"><b>Property notes for inspectors</b><br>
       <textarea name="notes" rows="2" style="width:100%;box-sizing:border-box">${esc(p.notes || '')}</textarea>
@@ -169,6 +170,13 @@ async function openProperty(id) {
     const { error } = await sb.from('tenancies').update({ notice_by: sel.value }).eq('id', sel.dataset.noticeby);
     msg(error ? error.message : `Entry notices for this tenancy will go by ${sel.value} (applies to new bookings)`);
   });
+  $('#ownerEdit').onclick = async e => {
+    e.preventDefault();
+    const v = prompt('Owner name (leave blank to show "c/- agency" on certificates)', p.owner_name || '');
+    if (v === null) return;
+    const { error } = await sb.from('properties').update({ owner_name: v.trim() || null }).eq('id', id);
+    msg(error ? error.message : 'Owner saved'); if (!error) openProperty(id);
+  };
   $('#propPhoto').onchange = async e => {
     const f = e.target.files[0]; if (!f) return; msg('Uploading photo…');
     const path = `${companyId}/property/${id}-${Date.now()}.jpg`;
@@ -287,6 +295,7 @@ async function openNewProperty() {
         <label class="wide">Street address *<input name="address_line" required placeholder="e.g. 12 Smith St or 3/45 Jones Rd"></label>
         <label>Suburb *<input name="suburb" required></label>
         <label>Postcode<input name="postcode" inputmode="numeric" maxlength="4"></label>
+        <label>Owner name <small>(if agent-managed)</small><input name="owner_name"></label>
         <label>Client (agent or owner) *<select name="client_id" required><option value="">— choose —</option>${grp('agency', 'Agencies')}${grp('owner', 'Owners')}</select></label>
         <label>Levels<input name="storeys" type="number" min="1" value="1"></label>
         <label>Bedrooms<input name="bedrooms" type="number" min="0"></label>

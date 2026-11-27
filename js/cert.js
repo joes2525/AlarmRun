@@ -14,7 +14,7 @@ async function load() {
   if (!session) return $('#msg').textContent = 'Please log in to the office app first';
   const { data: j, error } = await sb.from('jobs').select(`id, company_id, completed_at, scheduled_start, outcome, outcome_notes, approved_at,
       blind_cleats, blind_cleats_needed, safety_switch, safety_switch_notes, comment_photo,
-      properties(address_line, suburb, postcode, photo, storeys, bedrooms, clients(name)),
+      properties(address_line, suburb, postcode, photo, owner_name, storeys, bedrooms, clients(name, type)),
       inspectors(name), certificates(number, compliant, issued_at),
       alarm_checks(action, replace_reason, quote, photo_path, alarms(location, sensor_type, power_source, brand, manufacture_date, expiry_date))`).eq('id', id).single();
   if (error) return $('#msg').textContent = error.message;
@@ -44,7 +44,7 @@ async function load() {
     <div class="result ${ok ? 'ok' : 'no'}">${ok ? '✓ THIS PROPERTY IS COMPLIANT' : '✗ THIS PROPERTY IS NOT COMPLIANT'}</div>
     <div class="prop"><div class="grid">
       <div><span>Property</span>${esc(p.address_line)}, ${esc(p.suburb)} QLD ${esc(p.postcode)}</div>
-      <div><span>Agent</span>${esc(p.clients?.name || '—')}</div>
+      <div><span>Owner</span>${esc(p.owner_name || (p.clients?.type && p.clients.type !== 'agency' ? p.clients.name : p.clients?.name ? 'c/- ' + p.clients.name : '—'))}</div>
       <div><span>Inspection date</span>${d(j.completed_at || j.scheduled_start)}</div>
       <div><span>Inspector</span>${esc(j.inspectors?.name || '—')}</div>
       <div><span>Levels / bedrooms</span>${esc(p.storeys || '—')} / ${esc(p.bedrooms ?? '—')}</div>
