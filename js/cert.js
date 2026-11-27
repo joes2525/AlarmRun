@@ -14,9 +14,9 @@ async function load() {
   if (!session) return $('#msg').textContent = 'Please log in to the office app first';
   const { data: j, error } = await sb.from('jobs').select(`id, company_id, completed_at, scheduled_start, outcome, outcome_notes, approved_at,
       blind_cleats, blind_cleats_needed, safety_switch, safety_switch_notes, comment_photo,
-      properties(address_line, suburb, postcode, photo, owner_name, storeys, bedrooms, clients(name, type)),
+      properties(address_line, suburb, postcode, photo, owner_name, storeys, bedrooms, clients(name, type, billing_email)),
       inspectors(name), certificates(number, compliant, issued_at),
-      alarm_checks(action, replace_reason, quote, photo_path, alarms(location, sensor_type, power_source, brand, manufacture_date, expiry_date))`).eq('id', id).single();
+      alarm_checks(action, replace_reason, quote, photo_path, action_price, alarms(location, sensor_type, power_source, brand, manufacture_date, expiry_date))`).eq('id', id).single();
   if (error) return $('#msg').textContent = error.message;
   const [{ data: co }, { data: words }] = await Promise.all([
     sb.from('companies').select('name, sender_name, phone, reply_to_email, abn, qbcc_licence').eq('id', j.company_id).single(),
@@ -70,6 +70,32 @@ async function load() {
       { Address: p.address_line, Suburb: p.suburb, Postcode: p.postcode || '', 'Visit date': d(j.completed_at || j.scheduled_start), Company: co?.sender_name || co?.name || '',
         Inspector: j.inspectors?.name || '' })).replace(/\n/g, '<br>')}</p>
     <footer>Issued by ${esc(co?.sender_name || co?.name)} · Certificate ${esc(cert.number || '')} · ${d(cert.issued_at)}${pics.some(x => x.url) ? ' · Page 1 of 2' : ''}</footer>`;
+  // tax invoice in front when extra (priced) work was done
+  const lines = checks.filter(c => Number(c.action_price) > 0).map(c => ({
+    desc: `${c.action === 'Replaced' && c.replace_reason ? `Replaced smoke alarm (${c.replace_reason})` : c.action} – ${c.alarms?.location || ''}`, amt: Number(c.action_price) }));
+  $('#inv').hidden = !lines.length;
+  if (lines.length) {
+    const total = lines.reduce((t, l) => t + l.amt, 0), gst = total / 11, m = v => '$' + v.toFixed(2);
+    const issued = j.approved_at || new Date().toISOString(), due = new Date(new Date(issued).getTime() + 14 * 864e5);
+    const cl = p.clients || {}, owner = p.owner_name || (cl.type && cl.type !== 'agency' ? cl.name : '');
+    $('#inv').innerHTML = `<div class="inv">
+      <header>
+        <div><h1>TAX INVOICE</h1><div>Invoice no. <b>INV-${esc(String(cert.number || '').split('-').pop())}</b></div>
+          <div>Date issued: ${d(issued)}</div><div>Due: ${d(due)}</div></div>
+        <div class="co"><b>${esc(co?.sender_name || co?.name)}</b><br>${co?.abn ? 'ABN ' + esc(co.abn) + '<br>' : '<span class="bad">ABN missing – add in Settings</span><br>'}
+          ${co?.phone ? esc(co.phone) + '<br>' : ''}${co?.reply_to_email ? esc(co.reply_to_email) : ''}</div>
+      </header>
+      <div class="billto"><b>Bill to</b><br>${esc(cl.name || '—')}${cl.type === 'agency' && owner ? `<br>for owner ${esc(owner)}` : ''}${cl.billing_email ? '<br>' + esc(cl.billing_email) : ''}
+        <br><b>Property</b>: ${esc(p.address_line)}, ${esc(p.suburb)} QLD ${esc(p.postcode)} · Inspected ${d(j.completed_at || j.scheduled_start)} · Certificate ${esc(cert.number || '')}</div>
+      <table><tr><th>Description</th><th class="n">Qty</th><th class="n">GST</th><th class="n">Amount (inc GST)</th></tr>
+        ${lines.map(l => `<tr><td>${esc(l.desc)}</td><td class="n">1</td><td class="n">${m(l.amt / 11)}</td><td class="n">${m(l.amt)}</td></tr>`).join('')}</table>
+      <table class="tot"><tr><td>Subtotal (ex GST)</td><td class="n">${m(total - gst)}</td></tr><tr><td>GST</td><td class="n">${m(gst)}</td></tr>
+        <tr><td>Total (inc GST)</td><td class="n">${m(total)}</td></tr></table>
+      <p><small>Total price includes GST.</small></p>
+      <div class="pay"><b>Payment</b> – please pay within 14 days, quoting INV-${esc(String(cert.number || '').split('-').pop())}.<br>
+        Bank details: <i>to be added in Settings</i></div>
+      <footer>${esc(co?.sender_name || co?.name)}${co?.abn ? ' · ABN ' + esc(co.abn) : ''} · Tax invoice</footer></div>`;
+  }
   // inspection photos on a second page
   const shown = pics.filter(x => x.url);
   $('#cert2').hidden = !shown.length;
