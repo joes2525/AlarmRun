@@ -19,7 +19,7 @@ async function load() {
       alarm_checks(action, replace_reason, quote, photo_path, action_price, alarms(location, sensor_type, power_source, brand, manufacture_date, expiry_date))`).eq('id', id).single();
   if (error) return $('#msg').textContent = error.message;
   const [{ data: co }, { data: words }] = await Promise.all([
-    sb.from('companies').select('name, sender_name, phone, reply_to_email, abn, qbcc_licence, bank_account_name, bank_bsb, bank_account_number, payment_terms_days').eq('id', j.company_id).single(),
+    sb.from('companies').select('name, sender_name, phone, reply_to_email, abn, qbcc_licence, electrical_licence, bank_account_name, bank_bsb, bank_account_number, payment_terms_days').eq('id', j.company_id).single(),
     sb.from('templates').select('kind, body').eq('channel', 'doc').in('kind', ['cert_compliant', 'cert_non_compliant'])]);
   const p = j.properties || {}, cert = [].concat(j.certificates || [])[0] || {}, ok = cert.compliant;
   const today = new Date().toISOString().slice(0, 10);
@@ -39,7 +39,7 @@ async function load() {
     <header>
       <div><h1>Smoke Alarm Compliance Certificate</h1><div>Certificate no. <b>${esc(cert.number || '—')}</b></div></div>
       <div class="co"><b>${esc(co?.sender_name || co?.name)}</b><br>${co?.phone ? esc(co.phone) + '<br>' : ''}${co?.reply_to_email ? esc(co.reply_to_email) + '<br>' : ''}
-        ${co?.abn ? 'ABN ' + esc(co.abn) + '<br>' : ''}${co?.qbcc_licence ? 'QBCC ' + esc(co.qbcc_licence) : ''}</div>
+        ${co?.abn ? 'ABN ' + esc(co.abn) + '<br>' : ''}${co?.electrical_licence ? 'Electrical licence ' + esc(co.electrical_licence) + '<br>' : ''}${co?.qbcc_licence ? 'QBCC ' + esc(co.qbcc_licence) : ''}</div>
     </header>
     <div class="result ${ok ? 'ok' : 'no'}">${ok ? '✓ THIS PROPERTY IS COMPLIANT' : '✗ THIS PROPERTY IS NOT COMPLIANT'}</div>
     <div class="prop"><div class="grid">

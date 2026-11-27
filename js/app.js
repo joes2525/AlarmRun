@@ -52,7 +52,7 @@ async function start() {
   $('#who').textContent = `${data[0].companies?.name || ''} · ${session.user.email}`;
   document.title = `${data[0].companies?.name || 'AlarmRun'} – Office`;
   show('app');
-  loadClientPick(); loadAlerts();
+  loadClientPick(); loadAlerts(); checkSetup();
   document.querySelector('aside button[data-tab="home"]').click();
 }
 
@@ -237,6 +237,22 @@ async function loadClientPick() {
     s.innerHTML = '<option value="">— client —</option>' + (data||[]).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join(''));
 }
 
+// ---------- Red banner on every page while essential setup is missing ----------
+async function checkSetup() {
+  const [{ data: c }, { count: ins }] = await Promise.all([
+    sb.from('companies').select('abn,electrical_licence,phone,reply_to_email,sender_code,bank_account_name,bank_bsb,bank_account_number').eq('id', companyId).single(),
+    sb.from('inspectors').select('id', { count: 'exact', head: true }).eq('active', true)]);
+  if (!c) return;
+  const miss = [['ABN', c.abn], ['electrical licence number', c.electrical_licence], ['company phone', c.phone], ['reply-to email', c.reply_to_email],
+    ['email sender code', c.sender_code], ['bank details', c.bank_account_name && c.bank_bsb && c.bank_account_number], ['an active inspector', ins]]
+    .filter(([, v]) => !v).map(([k]) => k);
+  const b = $('#setupBanner'); b.hidden = !miss.length;
+  b.innerHTML = miss.length ? `⚠ Set up before work starts – missing: <b>${miss.join(', ')}</b>.
+    <a href="#" id="setupGo">${miss.length === 1 && miss[0] === 'an active inspector' ? 'Go to Inspectors' : 'Go to Settings'} →</a>` : '';
+  if (miss.length) $('#setupGo').onclick = e => { e.preventDefault();
+    $('#adminMenu').hidden = false; document.querySelector(`aside button[data-tab="${miss.length === 1 && miss[0] === 'an active inspector' ? 'inspectors' : 'settings'}"]`).click(); };
+}
+
 // ---------- Inspectors: list with Edit, add below ----------
 let insRows = [], insEditing = null;
 async function loadInspectors() {
@@ -268,7 +284,7 @@ $('#insTable').onclick = async e => {
     row.daily_capacity = +row.daily_capacity || 18;
     const { error } = await sb.from('inspectors').update(row).eq('id', b.dataset.inssave);
     if (error) return msg(error.message);
-    insEditing = null; inspectors = []; msg('Inspector saved'); loadInspectors(); loadAvail();
+    insEditing = null; inspectors = []; msg('Inspector saved'); loadInspectors(); loadAvail(); checkSetup();
   }
 };
 $('#insAddBtn').onclick = () => { $('#insAdd').classList.remove('hidden'); $('#insAddBtn').classList.add('hidden'); $('#insAdd').name.focus(); };
@@ -904,7 +920,7 @@ $('#tplSave').onclick = async () => {
 // ---------- Company settings ----------
 const PLATFORM_DOMAIN = 'yourdomain.com.au';   // change when the real sending domain is set up
 async function loadCompany() {
-  const { data, error } = await sb.from('companies').select('name,sender_name,sender_code,reply_to_email,phone,abn,qbcc_licence,signature,bank_account_name,bank_bsb,bank_account_number,payment_terms_days').eq('id', companyId).single();
+  const { data, error } = await sb.from('companies').select('name,sender_name,sender_code,reply_to_email,phone,abn,qbcc_licence,electrical_licence,signature,bank_account_name,bank_bsb,bank_account_number,payment_terms_days').eq('id', companyId).single();
   if (error) return msg(error.message);
   const f = $('#coForm'); for (const k in data) if (f[k]) f[k].value = data[k] ?? '';
   coPreview(); showSig(data.signature);
@@ -938,7 +954,7 @@ $('#coForm').onsubmit = async e => {
   const row = {}; for (const [k, v] of new FormData(e.target)) row[k] = v.trim() || null;
   row.payment_terms_days = +row.payment_terms_days || 14;
   const { error } = await sb.from('companies').update(row).eq('id', companyId);
-  msg(error ? error.message : 'Settings saved');
+  msg(error ? error.message : 'Settings saved'); checkSetup();
 };
 
 // ---------- Prices & lists ----------

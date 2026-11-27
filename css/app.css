@@ -168,3 +168,6 @@ main button.r{background:#fbe5e4;color:var(--bad);border-color:#f3c2bf}
 #pxLists td{padding:4px 10px;vertical-align:middle}
 #pxLists th{border-radius:0}
 #pxLists th:last-child,#pxLists td:last-child{text-align:center}
+.setup-banner{background:#c8312b;color:#fff;padding:10px 14px;border-radius:10px;margin:-10px 0 16px;font-size:14px}
+.setup-banner a{color:#fff;font-weight:700;margin-left:8px}
+main:has(#setupBanner:not([hidden])) .phead{margin-top:0}
