@@ -232,19 +232,21 @@ async function loadClientPick() {
 // ---------- Inspectors: list with Edit, add below ----------
 let insRows = [], insEditing = null;
 async function loadInspectors() {
-  const { data, error } = await sb.from('inspectors').select('id,name,email,phone,base_suburb,daily_capacity,active').order('active', { ascending: false }).order('name');
+  const { data, error } = await sb.from('inspectors').select('id,name,first_name,last_name,known_as,email,phone,base_suburb,daily_capacity,active').order('active', { ascending: false }).order('name');
   if (error) return msg(error.message);
   insRows = data; drawInspectors();
 }
 function drawInspectors() {
-  const inp = (n, v, t = 'text') => `<input name="${n}" type="${t}" value="${esc(v ?? '')}"${t === 'number' ? ' min="1" style="width:80px"' : ''}>`;
-  $('#insTable').innerHTML = '<tr><th>Name</th><th>Email</th><th>Phone</th><th>Home suburb</th><th>Jobs/day</th><th>Active</th><th></th></tr>' +
+  const inp = (n, v, t = 'text', ph = '') => `<input name="${n}" type="${t}" value="${esc(v ?? '')}" placeholder="${esc(ph)}"${t === 'number' ? ' min="1" style="width:80px"' : ''}>`;
+  $('#insTable').innerHTML = '<tr><th>First name</th><th>Last name</th><th title="Used in entry notices and texts to tenants">Name for tenants</th><th>Email</th><th>Phone</th><th>Home suburb</th><th>Jobs/day</th><th>Active</th><th></th></tr>' +
     insRows.map(r => r.id === insEditing
-      ? `<tr class="editing" data-id="${r.id}"><td>${inp('name', r.name)}</td><td>${inp('email', r.email, 'email')}</td><td>${inp('phone', r.phone)}</td>
+      ? `<tr class="editing" data-id="${r.id}"><td>${inp('first_name', r.first_name ?? r.name)}</td><td>${inp('last_name', r.last_name)}</td>
+          <td>${inp('known_as', r.known_as, 'text', 'same as first name')}</td><td>${inp('email', r.email, 'email')}</td><td>${inp('phone', r.phone)}</td>
           <td>${inp('base_suburb', r.base_suburb)}</td><td>${inp('daily_capacity', r.daily_capacity, 'number')}</td>
           <td><input type="checkbox" name="active" style="width:auto"${r.active ? ' checked' : ''}></td>
           <td style="white-space:nowrap"><button type="button" class="primary" data-inssave="${r.id}">Save</button> <button type="button" data-inscancel>Cancel</button></td></tr>`
-      : `<tr${r.active ? '' : ' class="muted"'}><td>${esc(r.name)}</td><td>${esc(r.email)}</td><td>${esc(r.phone)}</td><td>${esc(r.base_suburb)}</td>
+      : `<tr${r.active ? '' : ' class="muted"'}><td>${esc(r.first_name ?? r.name)}</td><td>${esc(r.last_name)}</td>
+          <td>${r.known_as ? esc(r.known_as) : `<span class="muted">${esc(r.first_name ?? '')}</span>`}</td><td>${esc(r.email)}</td><td>${esc(r.phone)}</td><td>${esc(r.base_suburb)}</td>
           <td>${esc(r.daily_capacity)}</td><td>${r.active ? 'Yes' : 'No'}</td><td><button type="button" data-insedit="${r.id}">Edit</button></td></tr>`).join('');
 }
 $('#insTable').onclick = async e => {
@@ -254,7 +256,7 @@ $('#insTable').onclick = async e => {
   if (b.dataset.inssave) {
     const tr = b.closest('tr'), row = {};
     tr.querySelectorAll('input').forEach(i => row[i.name] = i.type === 'checkbox' ? i.checked : (i.value.trim() || null));
-    if (!row.name) return msg('Name is required');
+    if (!row.first_name) return msg('First name is required');
     row.daily_capacity = +row.daily_capacity || 18;
     const { error } = await sb.from('inspectors').update(row).eq('id', b.dataset.inssave);
     if (error) return msg(error.message);
@@ -836,10 +838,10 @@ $('#msgSections').onclick = e => {
 };
 
 // ---------- Templates ----------
-const PLACEHOLDERS = ['Tenant greeting', 'Tenant names', 'Address', 'Suburb', 'Postcode', 'Visit date', 'Old visit date', 'Inspector', 'Company'];
+const PLACEHOLDERS = ['Tenant greeting', 'Tenant names', 'Address', 'Suburb', 'Postcode', 'Visit date', 'Old visit date', 'Inspector', 'Inspector full name', 'Company', 'Tenant link'];
 let templates = [], tplField = null;
 const sampleVars = () => ({ 'Tenant greeting': 'Sam & Alex', 'Tenant names': 'Sam Smith & Alex Jones', Address: '8 Aaron Street', Suburb: 'COOMERA',
-  Postcode: '4209', 'Visit date': 'Tuesday 8 December 2026', 'Old visit date': 'Friday 4 December 2026', Inspector: 'Liam',
+  Postcode: '4209', 'Visit date': 'Tuesday 8 December 2026', 'Old visit date': 'Friday 4 December 2026', Inspector: 'Liam', 'Inspector full name': 'Liam Smith', 'Tenant link': 'https://joes2525.github.io/AlarmRun/tenant.html?t=…',
   Company: ($('#who').textContent.split(' · ')[0] || 'Your company') });
 const fill = (t, v) => Object.entries(v).reduce((s, [k, x]) => s.split('{' + k + '}').join(x), t || '');
 async function loadTemplates() {

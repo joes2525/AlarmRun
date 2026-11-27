@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AlarmRun – Office</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap">
-<link rel="stylesheet" href="css/app.css?v=2611271330">
+<link rel="stylesheet" href="css/app.css?v=2611271419">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2611271330"></script>
+<script src="config.js?v=2611271419"></script>
 </head>
 <body>
 <h1>AlarmRun – Office</h1>
@@ -120,7 +120,9 @@
     <table id="insTable"></table>
     <p><button type="button" id="insAddBtn" class="primary">+ Add inspector</button></p>
     <form id="insAdd" class="hidden">
-      <input name="name" placeholder="Full name" required>
+      <input name="first_name" placeholder="First name" required>
+      <input name="last_name" placeholder="Last name">
+      <input name="known_as" placeholder="Name for tenants (optional, e.g. Mick)">
       <input name="email" type="email" placeholder="Email">
       <input name="phone" placeholder="Phone">
       <input name="base_suburb" placeholder="Home suburb">
@@ -281,6 +283,6 @@
   </main>
 </section>
 
-<script src="js/app.js?v=2611271330"></script>
+<script src="js/app.js?v=2611271419"></script>
 </body>
 </html>

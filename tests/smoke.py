@@ -133,7 +133,7 @@ def main():
         for t in ['clients', 'properties', 'inspectors']:
             step(f'{t} list', lambda t=t: tab(t))
         step('Inspectors table has Edit', lambda: (page.wait_for_selector('#insTable button[data-insedit]', timeout=3000), page.locator('#insTable button[data-insedit]').first.click(),
-             page.wait_for_selector('#insTable tr.editing input[name=name]', timeout=2000), page.click('#insTable [data-inscancel]')))
+             page.wait_for_selector('#insTable tr.editing input[name=first_name]', timeout=2000), page.click('#insTable [data-inscancel]')))
         step('Availability grid toggles', lambda: (page.wait_for_selector('#availGrid td[data-day]', timeout=2000), page.locator('#availGrid td[data-day]').first.click(),
              None if page.locator('#availGrid td.off').count() >= 17 else errors.append('Availability toggle failed')))
         # ---- certificate preview ----
