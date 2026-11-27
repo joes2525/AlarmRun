@@ -152,7 +152,7 @@ async function openJob(id, push = true) {
   show('job'); msg(''); $('#jobBody').innerHTML = '<p class="muted">Loading…</p>'; scrollTo(0, 0);
   await loadLists();
   const { data: j, error } = await sb.from('jobs')
-    .select(`id,job_type,status,locked,approved_at,notes,property_id,outcome,outcome_notes,comment_photo,blind_cleats,blind_cleats_needed,safety_switch,safety_switch_notes,
+    .select(`id,job_type,status,locked,approved_at,notes,tenant_note,property_id,outcome,outcome_notes,comment_photo,blind_cleats,blind_cleats_needed,safety_switch,safety_switch_notes,
       properties(address_line,suburb,postcode,access_notes,notes,storeys,bedrooms,ceiling_access,clients(name,notes)),
       alarm_checks(alarm_id,action,replace_reason,quote,photo_path)`).eq('id', id).single();
   if (error) return msg(error.message);
@@ -161,7 +161,7 @@ async function openJob(id, push = true) {
   const [{ data: alarms }, { data: ten }] = await Promise.all([
     sb.from('alarms').select('id,location,sensor_type,power_source,brand,manufacture_date,expiry_date')
       .eq('property_id', j.property_id).or(`active.eq.true${ids.length ? `,id.in.(${ids.join(',')})` : ''}`).order('location'),
-    sb.from('tenancies').select('tenant_names,mobile,email,notes').eq('property_id', j.property_id).order('lease_start', { ascending: false, nullsFirst: false }).limit(1)]);
+    sb.from('tenancies').select('tenant_names,mobile,email,notes,tenant_notes,extra_phones').eq('property_id', j.property_id).order('lease_start', { ascending: false, nullsFirst: false }).limit(1)]);
   const p = j.properties || {};
   job = { ...j, tenant: ten?.[0] || {},
     extra: { ceiling_access: p.ceiling_access || '', storeys: p.storeys || '', bedrooms: p.bedrooms || '',
@@ -181,7 +181,7 @@ function renderJob() {
   const editing = job.status === 'completed' && !job.approved_at && !job.locked;
   const done = !editing && (job.locked || !['booked', 'in_progress'].includes(job.status));
   const addr = encodeURIComponent(`${p.address_line}, ${p.suburb} QLD ${p.postcode || ''}`);
-  const notes = [['Agent', p.clients?.notes], ['Property', p.notes], ['Keys / access', p.access_notes], ['Tenant', t.notes], ['Job', job.notes]].filter(n => n[1]);
+  const notes = [['Agent', p.clients?.notes], ['Property', p.notes], ['Keys / access', p.access_notes], ['Tenant', t.notes], ['From tenant (always)', t.tenant_notes], ['From tenant (this visit)', job.tenant_note], ['Other tenant phones', (t.extra_phones || []).join(', ')], ['Job', job.notes]].filter(n => n[1]);
   $('#jobBody').innerHTML = `
     <div class="card">
       <h3>${esc(p.address_line)}</h3><div class="muted">${esc(p.suburb)} ${esc(p.postcode)} · ${esc(p.clients?.name)}</div>

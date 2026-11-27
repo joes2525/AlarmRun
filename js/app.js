@@ -89,6 +89,7 @@ async function openProperty(id) {
     sb.from('jobs').select('job_type,status,scheduled_start,notes,certificates(number,compliant)').eq('property_id', id).order('scheduled_start', { ascending: false }),
     sb.from('tenancies').select('*').eq('property_id', id).order('lease_start', { ascending: false, nullsFirst: false }),
   ]);
+  const changes = (ten || []).length ? (await sb.from('tenant_changes').select('what,at').in('tenancy_id', ten.map(t => t.id)).order('at', { ascending: false }).limit(30)).data || [] : [];
   const today = new Date().toISOString().slice(0,10);
   const pic = (await photoUrls([p.photo]))(p.photo);
   $('#detailBody').innerHTML = `
@@ -104,8 +105,11 @@ async function openProperty(id) {
       <input name="notes" placeholder="Details e.g. hallway alarm beeping" size="45" required><button>Log job</button></form>
     <h3>Tenancies (${ten.length})</h3>
     <table><tr><th>Tenants</th><th>Mobile</th><th>Email</th><th>Notices by</th><th>Move in</th><th>Lease</th><th>Vacate</th><th>PM</th></tr>
-    ${ten.map(t => `<tr><td>${esc(t.tenant_names)}${t.owner_occupied ? ' <span class="tag">Owner occupied</span>' : ''}</td><td>${esc(t.mobile)}</td><td>${esc(t.email)}</td><td><select data-noticeby="${t.id}"><option value="email"${t.notice_by !== 'mail' ? ' selected' : ''}>Email</option><option value="mail"${t.notice_by === 'mail' ? ' selected' : ''}>Mail</option></select></td><td>${date(t.move_in)}</td>
-      <td>${date(t.lease_start)} → ${leaseEnd(t.lease_end)}</td><td>${date(t.vacate_date)}</td><td>${esc(t.property_manager)}</td></tr>`).join('')}</table>
+    ${ten.map(t => `<tr><td>${esc(t.tenant_names)}${t.owner_occupied ? ' <span class="tag">Owner occupied</span>' : ''}</td><td>${esc(t.mobile)}${(t.extra_phones || []).map(x => '<br><small>' + esc(x) + '</small>').join('')}</td><td>${esc(t.email)}${(t.extra_emails || []).map(x => '<br><small>' + esc(x) + '</small>').join('')}</td><td><select data-noticeby="${t.id}"><option value="email"${t.notice_by !== 'mail' ? ' selected' : ''}>Email</option><option value="mail"${t.notice_by === 'mail' ? ' selected' : ''}>Mail</option></select></td><td>${date(t.move_in)}</td>
+      <td>${date(t.lease_start)} → ${leaseEnd(t.lease_end)}</td><td>${date(t.vacate_date)}</td><td>${esc(t.property_manager)}</td></tr>
+      ${t.tenant_notes ? `<tr><td colspan="9"><b>Tenant's notes:</b> ${esc(t.tenant_notes)}</td></tr>` : ''}`).join('')}</table>
+    ${changes.length ? `<details><summary>Changes made by tenants (${changes.length})</summary><table>${changes.map(c =>
+      `<tr><td style="white-space:nowrap">${new Date(c.at).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</td><td>${esc(c.what)}</td></tr>`).join('')}</table></details>` : ''}
     <form id="tenForm">
       <input name="tenant_names" placeholder="Tenant name(s)" required>
       <input name="mobile" placeholder="Mobile">
@@ -493,7 +497,7 @@ async function openDay() {
   const ins = inspectors.find(i => i.id === pick.ins);
   if (!ins) { $('#dayView').innerHTML = '<h3>Pick a day on the week board</h3><div class="dayBox"></div>'; return; }
   const day = pick.day;
-  const { data, error } = await sb.from('jobs').select('id,job_type,status,route_order,notes,properties(address_line,suburb,clients(name))')
+  const { data, error } = await sb.from('jobs').select('id,job_type,status,route_order,notes,tenant_note,properties(address_line,suburb,clients(name))')
     .eq('inspector_id', ins.id).gte('scheduled_start', day + 'T00:00').lte('scheduled_start', day + 'T23:59')
     .in('status', ['booked', 'in_progress']).order('route_order');
   if (error) return msg(error.message);
@@ -518,7 +522,7 @@ async function openDay() {
       <td>${(r => `<span class="why why-${r.toLowerCase().replace(/\s+/g, '-')}">${esc(r)}</span>`)(label[j.job_type] || j.job_type)}</td><td>${esc(j.status)}</td>
       <td>${j.status === 'booked' ? `<button data-unbook="${j.id}" data-type="${j.job_type}">Unbook</button>` : ''}
         <button data-up="${i}" title="Move up" ${i ? '' : 'disabled'}>▲</button><button data-down="${i}" title="Move down" ${i < data.length - 1 ? '' : 'disabled'}>▼</button></td>
-      <td>${esc(j.notes)}</td></tr>`).join('') + '</table></div>';
+      <td>${esc(j.notes)}${j.tenant_note ? `${j.notes ? '<br>' : ''}<b>Tenant:</b> ${esc(j.tenant_note)}` : ''}</td></tr>`).join('') + '</table></div>';
   dayJobIds = data.map(j => j.id);
 }
 // unbooked jobs keep existing but lose their inspector/day, so they land back in Ready to book

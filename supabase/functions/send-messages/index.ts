@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         from: `${co.sender_name || co.name || "Smoke alarms"} <${FROM_ADDRESS}>`,
-        to: [m.to_address],
+        to: String(m.to_address).split(/\s*,\s*/).filter(Boolean),   // entry notices can go to several tenants
         reply_to: co.reply_to_email || undefined,
         subject: m.subject,
         text: m.body,
