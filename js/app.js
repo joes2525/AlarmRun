@@ -942,7 +942,7 @@ async function loadPrices() {
 }
 function drawPrices() {
   $('#pxLists').innerHTML = PX.map(([k, title, priced]) => `<div><h3 style="margin-top:0">${title}</h3><table class="grp">
-    <tr><th>Name</th>${priced ? '<th>Price inc GST</th><th>GST</th><th>Ex GST</th>' : ''}<th>Show</th></tr>` +
+    <tr><th>Name</th>${priced ? '<th>Price inc GST</th><th>GST</th><th>Ex GST</th>' : ''}<th>Show in App</th></tr>` +
     pxRows.map((r, i) => r.kind !== k ? '' : `<tr class="prow"><td><input type="text" data-px="${i}" data-f="name" value="${esc(r.name)}"></td>
       ${priced ? `<td>$<input type="number" step="0.01" min="0" data-px="${i}" data-f="price" value="${r.price ?? 0}"></td>
         <td class="gst" data-gst="${i}">${money(Number(r.price || 0) / 11)}</td><td class="gst" data-ex="${i}">${money(Number(r.price || 0) / 1.1)}</td>` : ''}
