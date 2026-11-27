@@ -92,7 +92,7 @@ async function openProperty(id) {
     sb.from('tenancies').select('*').eq('property_id', id).order('lease_start', { ascending: false, nullsFirst: false }),
   ]);
   const [nq, iq] = await Promise.all([
-    sb.from('messages').select('kind,channel,to_name,to_address,status,error,for_date,send_after,sent_at').eq('property_id', id)
+    sb.from('messages').select('id,kind,channel,to_name,to_address,status,error,for_date,send_after,sent_at,body').eq('property_id', id)
       .or('kind.like.entry_notice*,kind.eq.reminder').order('send_after', { ascending: false }).limit(50),
     sb.from('invoices').select('number,amount_ex_gst,gst,status,created_at,clients(name),jobs!inner(property_id)').eq('jobs.property_id', id).order('created_at', { ascending: false }).limit(50)]);
   const notices = nq.data || [], invs = iq.data || [];
@@ -145,15 +145,22 @@ async function openProperty(id) {
     ${jobs.map(j => { const c = j.certificates?.[0] || j.certificates; return `<tr><td>${date(j.scheduled_start)}</td><td>${esc(j.job_type)}</td><td>${esc(j.status)}</td>
       <td>${c?.number ? `<a href="cert.html?job=${j.id}" target="_blank">${esc(c.number)}</a>` + (c.compliant ? ' <span class=good>✓ Compliant</span>' : ' <span class=bad>✗ Non-compliant</span>') : ''}</td><td>${esc(j.notes)}</td></tr>`; }).join('')}</table>
     <h3>Entry notices (${notices.length})</h3>
-    ${notices.length ? `<table><tr><th>Visit</th><th>Type</th><th>By</th><th>To</th><th>Status</th><th>Sent</th></tr>${notices.map(m => `<tr>
+    ${notices.length ? `<table id="propNotices"><tr><th>Visit</th><th>Type</th><th>By</th><th>To</th><th>Status</th><th>Sent</th><th></th></tr>${notices.map(m => `<tr>
       <td>${date(m.for_date)}</td><td>${esc((m.kind || '').replace('entry_notice_changed', 'Date changed').replace('entry_notice', 'Entry notice').replace('reminder', 'Reminder'))}</td>
       <td>${esc(m.channel)}</td><td>${esc(m.to_name)}<br><small>${esc(m.to_address)}</small></td>
       <td>${m.status === 'failed' ? `<span class="bad">Failed</span>${m.error ? `<br><small>${esc(m.error)}</small>` : ''}` : m.status === 'cancelled' ? '<span class="muted">Deleted</span>' : esc(m.status === 'sent' ? (m.channel === 'mail' ? 'Posted' : 'Sent') : 'Queued')}</td>
-      <td>${m.sent_at ? date(m.sent_at) : `<small class="muted">due ${date(m.send_after)}</small>`}</td></tr>`).join('')}</table>` : '<p class="muted">No entry notices yet.</p>'}
+      <td>${m.sent_at ? date(m.sent_at) : `<small class="muted">due ${date(m.send_after)}</small>`}</td><td><a href="#" data-pmsg="${m.id}">View</a></td></tr>`).join('')}</table>` : '<p class="muted">No entry notices yet.</p>'}
     <h3>Invoices (${invs.length})</h3>
     ${invs.length ? `<table><tr><th>Date</th><th>Number</th><th>Client</th><th>Amount (inc GST)</th><th>Status</th></tr>${invs.map(v => `<tr>
       <td>${date(v.created_at)}</td><td>${esc(v.number)}</td><td>${esc(v.clients?.name)}</td><td>${money(Number(v.amount_ex_gst) + Number(v.gst || 0))}</td><td>${esc(v.status)}</td></tr>`).join('')}</table>`
       : '<p class="muted">No invoices yet.</p>'}`;
+  if ($('#propNotices')) $('#propNotices').onclick = e => {   // show the notice text under its row
+    const a = e.target.closest('[data-pmsg]'); if (!a) return; e.preventDefault();
+    const tr = a.closest('tr'), nx = tr.nextElementSibling;
+    if (nx?.classList.contains('docbody')) return nx.remove();
+    const m = notices.find(x => x.id === a.dataset.pmsg);
+    tr.insertAdjacentHTML('afterend', `<tr class="docbody"><td colspan="7"><div style="white-space:pre-wrap">${esc(m.body || '(no text)')}</div></td></tr>`);
+  };
   $('#detailBody').querySelectorAll('[data-noticeby]').forEach(sel => sel.onchange = async () => {
     const { error } = await sb.from('tenancies').update({ notice_by: sel.value }).eq('id', sel.dataset.noticeby);
     msg(error ? error.message : `Entry notices for this tenancy will go by ${sel.value} (applies to new bookings)`);
