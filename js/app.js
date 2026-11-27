@@ -988,8 +988,8 @@ async function loadCompleted() {
   const done = data.filter(r => r.status === 'completed');
   const ok = done.filter(r => r.compliant);
   const groups = [
+    ['Serviced', ok.filter(r => !r.has_invoice && !r.has_quote), false],
     ['Non-compliant', done.filter(r => !r.compliant), true],
-    ['Serviced – no issues', ok.filter(r => !r.has_invoice && !r.has_quote), false],
     ['Invoices – extra work done', ok.filter(r => r.has_invoice), true],
     ['Quotes', ok.filter(r => r.has_quote), true],
     ['No access', data.filter(r => r.status === 'no_access'), true]];
