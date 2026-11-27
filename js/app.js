@@ -391,9 +391,10 @@ function showProps() {
   const today = iso(new Date());
   const rows = [...left.querySelectorAll('.pick.' + focusGroup)].map(c => readyRows.get(c.dataset.key)).filter(Boolean);
   $('#propsHead').textContent = head.dataset.label;
-  $('#readyProps').innerHTML = '<tr><th></th><th>Address</th><th>Last done</th><th>Due</th><th>Notes</th></tr>' + rows.map(r =>
+  $('#readyProps').innerHTML = '<tr><th></th><th>Address</th><th>Reason</th><th>Due</th><th>Notes</th></tr>' + rows.map(r =>
     `<tr class="prow"><td><input type="checkbox" data-key="${keyOf(r)}"${ticked.ready.has(keyOf(r)) ? ' checked' : ''}></td>
-     <td>${esc(r.address_line)}, ${esc(r.suburb)}</td><td>${date(r.last_done)}</td>
+     <td><a href="#" data-prop="${r.property_id}">${esc(r.address_line)}, ${esc(r.suburb)}</a></td>
+     <td><span class="why why-${esc((r.reason || 'other').toLowerCase().replace(/\s+/g, '-'))}">${esc(r.reason || 'Other')}</span></td>
      <td class="${r.due_date && r.due_date < today ? 'bad' : ''}">${date(r.due_date)}</td><td>${esc(r.notes)}</td></tr>`).join('');
 }
 $('#readyProps').onchange = e => {
