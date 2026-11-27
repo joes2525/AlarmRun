@@ -131,6 +131,8 @@ $('#prevDay').onclick = () => shiftDay(-1);
 $('#nextDay').onclick = () => shiftDay(1);
 
 // ---------- one job ----------
+// colour of each action button when picked: serviced green, replaced/moved blue, missing yellow, damaged/expired red
+const actColour = a => /servic/i.test(a) ? 'act-g' : /replac|mov/i.test(a) ? 'act-b' : /missing/i.test(a) ? 'act-y' : /damag|expir/i.test(a) ? 'act-r' : '';
 let lists = null;   // locations, device types, actions, quotes (from the Prices page)
 async function loadLists() {
   if (lists) return;
@@ -233,7 +235,7 @@ function itemCard(it, i) {
     <h3>${esc(it.location)} <span class="tag">${esc(it.device_type || '?')}</span>${it.alarm_id ? '' : ' <span class="tag">new</span>'}</h3>
     <div class="muted">${esc(it.brand || '')} ${it.manufacture_date ? 'made ' + esc(it.manufacture_date.slice(0, 7)) : ''}
       ${it.expiry_date ? `<span class="${expired ? 'bad' : ''}">· expires ${esc(it.expiry_date.slice(0, 7))}${expired ? ' – EXPIRED' : ''}</span>` : ''}</div>
-    <div class="seg">${lists.action.map(a => `<button data-i="${i}" data-act="${esc(a)}" class="${it.action === a ? 'on' : ''}">${esc(a)}</button>`).join('')}</div>
+    <div class="seg">${lists.action.map(a => `<button data-i="${i}" data-act="${esc(a)}" class="${actColour(a)}${it.action === a ? ' on' : ''}">${esc(a)}</button>`).join('')}</div>
     ${it.action === 'Replaced' ? `<div class="replace">
       <label class="muted">Why was it replaced?</label><select data-i="${i}" data-f="replace_reason">${opts(lists.replace_reason, it.replace_reason, 'Choose reason')}</select>
       <label class="muted">New device type</label><select data-i="${i}" data-f="new_type">${opts(lists.device_type, it.new_type, 'Choose type')}</select>

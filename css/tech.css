@@ -67,3 +67,7 @@ button.primary,.seg button.on{background:var(--blue);border-color:var(--blue)}
 .tag.bad,.bad,#msg{color:var(--bad)}
 .photo-ok{color:var(--ok)}
 .card.moved{background:#fff1c2;border-color:#f0d27a;box-shadow:inset 4px 0 var(--orange)}
+.seg button.on.act-g{background:#16845b;border-color:#16845b;color:#fff}
+.seg button.on.act-b{background:var(--blue);border-color:var(--blue);color:#fff}
+.seg button.on.act-y{background:#facc15;border-color:#e0b400;color:#3f2d00}
+.seg button.on.act-r{background:#c8312b;border-color:#c8312b;color:#fff}
