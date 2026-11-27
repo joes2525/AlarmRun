@@ -229,6 +229,49 @@ async function loadClientPick() {
     s.innerHTML = '<option value="">— client —</option>' + (data||[]).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join(''));
 }
 
+// ---------- Inspectors: list with Edit, add below ----------
+let insRows = [], insEditing = null;
+async function loadInspectors() {
+  const { data, error } = await sb.from('inspectors').select('id,name,email,phone,base_suburb,daily_capacity,active').order('active', { ascending: false }).order('name');
+  if (error) return msg(error.message);
+  insRows = data; drawInspectors();
+}
+function drawInspectors() {
+  const inp = (n, v, t = 'text') => `<input name="${n}" type="${t}" value="${esc(v ?? '')}"${t === 'number' ? ' min="1" style="width:80px"' : ''}>`;
+  $('#insTable').innerHTML = '<tr><th>Name</th><th>Email</th><th>Phone</th><th>Home suburb</th><th>Jobs/day</th><th>Active</th><th></th></tr>' +
+    insRows.map(r => r.id === insEditing
+      ? `<tr class="editing" data-id="${r.id}"><td>${inp('name', r.name)}</td><td>${inp('email', r.email, 'email')}</td><td>${inp('phone', r.phone)}</td>
+          <td>${inp('base_suburb', r.base_suburb)}</td><td>${inp('daily_capacity', r.daily_capacity, 'number')}</td>
+          <td><input type="checkbox" name="active" style="width:auto"${r.active ? ' checked' : ''}></td>
+          <td style="white-space:nowrap"><button type="button" class="primary" data-inssave="${r.id}">Save</button> <button type="button" data-inscancel>Cancel</button></td></tr>`
+      : `<tr${r.active ? '' : ' class="muted"'}><td>${esc(r.name)}</td><td>${esc(r.email)}</td><td>${esc(r.phone)}</td><td>${esc(r.base_suburb)}</td>
+          <td>${esc(r.daily_capacity)}</td><td>${r.active ? 'Yes' : 'No'}</td><td><button type="button" data-insedit="${r.id}">Edit</button></td></tr>`).join('');
+}
+$('#insTable').onclick = async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.insedit) { insEditing = b.dataset.insedit; return drawInspectors(); }
+  if (b.hasAttribute('data-inscancel')) { insEditing = null; return drawInspectors(); }
+  if (b.dataset.inssave) {
+    const tr = b.closest('tr'), row = {};
+    tr.querySelectorAll('input').forEach(i => row[i.name] = i.type === 'checkbox' ? i.checked : (i.value.trim() || null));
+    if (!row.name) return msg('Name is required');
+    row.daily_capacity = +row.daily_capacity || 18;
+    const { error } = await sb.from('inspectors').update(row).eq('id', b.dataset.inssave);
+    if (error) return msg(error.message);
+    insEditing = null; inspectors = []; msg('Inspector saved'); loadInspectors(); loadAvail();
+  }
+};
+$('#insAddBtn').onclick = () => { $('#insAdd').classList.remove('hidden'); $('#insAddBtn').classList.add('hidden'); $('#insAdd').name.focus(); };
+$('#insAddCancel').onclick = () => { $('#insAdd').reset(); $('#insAdd').classList.add('hidden'); $('#insAddBtn').classList.remove('hidden'); };
+$('#insAdd').onsubmit = async e => {
+  e.preventDefault();
+  const row = { company_id: companyId, active: true };
+  for (const [k, v] of new FormData(e.target)) if (String(v).trim()) row[k] = String(v).trim();
+  const { error } = await sb.from('inspectors').insert(row);
+  if (error) return msg(error.message);
+  $('#insAddCancel').onclick(); inspectors = []; msg('Inspector added'); loadInspectors(); loadAvail();
+};
+
 // ---------- Add property: full screen with client, tenancy and last inspection ----------
 async function openNewProperty() {
   scrollTo(0, 0);
@@ -1164,7 +1207,7 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
   $('#toArea').classList.toggle('hidden', tab !== 'scheduled');
   if (tab === 'scheduled') { $('#schedSide').append($('#dayView'), $('#toArea')); }
   else { $('#week').after($('#dayView')); }
-  if (tab === 'inspectors') loadAvail();
+  if (tab === 'inspectors') { $('#listArea').classList.add('hidden'); loadAvail(); return loadInspectors(); }
   if (tab === 'home') { $('#listArea').classList.add('hidden'); return loadHome(); }
   if (tab === 'completed') { $('#listArea').classList.add('hidden'); return loadCompleted(); }
   if (tab === 'prices') { $('#listArea').classList.add('hidden'); return loadPrices(); }
@@ -1179,7 +1222,7 @@ document.querySelectorAll('aside button[data-tab]').forEach(b => b.onclick = () 
 // Keep several open windows in step: reload the current table when you come back to a window
 const reloaders = { home: () => loadHome(), completed: () => loadCompleted(), documents: () => loadDocs(), messages: () => loadMessages(),
   due: () => openSchedule(), book: () => openSchedule(), scheduled: () => openSchedule(),
-  clients: () => loadList(), properties: () => loadList(), tenants: () => loadList(), inspectors: () => loadList() };
+  clients: () => loadList(), properties: () => loadList(), tenants: () => loadList(), inspectors: () => loadInspectors() };
 let leftAt = 0;
 const refreshTab = () => {
   if (!companyId || !$('#detail').classList.contains('hidden')) return;     // not signed in / property open
