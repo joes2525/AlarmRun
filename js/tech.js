@@ -175,11 +175,22 @@ async function openJob(id, push = true) {
         expiry_date: a.expiry_date, brand: a.brand, power_source: a.power_source, action: c.action || '', quote: c.quote || '',
         replace_reason: c.replace_reason || '', photo_path: c.photo_path || '',
         new_type: c.action === 'Replaced' ? cap(a.sensor_type) : '', new_date: c.action === 'Replaced' ? a.manufacture_date : '' }; }) };
+  // unsaved progress from earlier on this phone (kept until Compliant/Non-compliant is saved)
+  if (!job.locked && !job.approved_at) try {
+    const d = JSON.parse(localStorage.getItem('draft:' + job.id) || 'null');
+    if (d) { Object.assign(job.extra, d.extra); d.items.forEach(di => { const it = job.items.find(x => x.alarm_id === di.alarm_id); if (it) Object.assign(it, di); }); }
+  } catch {}
   renderJob();
 }
+// save progress on this phone after every change – instant, and works without signal
+const saveDraft = () => { if (!job || job.locked || job.approved_at) return;
+  try { localStorage.setItem('draft:' + job.id, JSON.stringify({ at: Date.now(), extra: job.extra,
+    items: job.items.map(({ alarm_id, action, quote, replace_reason, photo_path, new_type, new_date }) => ({ alarm_id, action, quote, replace_reason, photo_path, new_type, new_date })) })); } catch {} };
+const dropDraft = id => { try { localStorage.removeItem('draft:' + id); } catch {} };
 const cap = s => s ? s[0].toUpperCase() + s.slice(1) : '';
 
 function renderJob() {
+  saveDraft();
   const p = job.properties || {}, t = job.tenant, x = job.extra;
   const editing = job.status === 'completed' && !job.approved_at && !job.locked;
   const done = !editing && (job.locked || !['booked', 'in_progress'].includes(job.status));
@@ -274,10 +285,13 @@ $('#jobBody').addEventListener('click', async e => {
   if (t.dataset.finish) return finish(t.dataset.finish, t);
 });
 
+// typing in comments/notes is saved as you type
+$('#jobBody').addEventListener('input', e => { const t = e.target;
+  if (t.dataset.xi && t.matches('textarea,input[type=text],input:not([type])')) { job.extra[t.dataset.xi] = t.value; saveDraft(); } });
 $('#jobBody').addEventListener('change', async e => {
   const t = e.target;
-  if (t.dataset.f) { const it = job.items[+t.dataset.i]; it[t.dataset.f] = t.type === 'month' ? t.value + '-01' : t.value; return; }
-  if (t.dataset.xi) { job.extra[t.dataset.xi] = t.value; return; }
+  if (t.dataset.f) { const it = job.items[+t.dataset.i]; it[t.dataset.f] = t.type === 'month' ? t.value + '-01' : t.value; return saveDraft(); }
+  if (t.dataset.xi) { job.extra[t.dataset.xi] = t.value; return saveDraft(); }
   if (t.dataset.photo && t.files[0]) {
     const isComment = t.dataset.photo === 'comment';
     const lbl = t.closest('label'); lbl.nextElementSibling?.classList.contains('photo-ok') && lbl.nextElementSibling.remove();
@@ -313,6 +327,7 @@ async function finish(outcome, btn) {
   const { data: cert, error } = await sb.rpc('complete_job', { p_job: job.id, p_items: items, p_outcome: outcome, p_extra: job.extra });
   btn.disabled = false;
   if (error) return msg(error.message);
+  dropDraft(job.id);
   alert(`${job.status === 'completed' ? 'Changes saved' : 'Done'} ✓ Certificate ${cert} (${outcome === 'compliant' ? 'compliant' : 'NOT compliant'})`);
   backToRun();
 }
