@@ -167,3 +167,4 @@ main button.r{background:#fbe5e4;color:var(--bad);border-color:#f3c2bf}
 #pxLists table,#pxLists td,#pxLists th{border:0}
 #pxLists td{padding:4px 10px;vertical-align:middle}
 #pxLists th{border-radius:0}
+#pxLists th:last-child,#pxLists td:last-child{text-align:center}
